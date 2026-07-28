@@ -15,7 +15,6 @@ import logging
 from typing import Any
 
 import chromadb  # type: ignore[import-untyped]
-from chromadb.api.types import EmbeddingFunction  # type: ignore[import-untyped]
 
 from src.config import settings
 

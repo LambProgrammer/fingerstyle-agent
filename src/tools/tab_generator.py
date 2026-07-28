@@ -184,7 +184,6 @@ def _select_best(
 
     Args:
         pitch:             MIDI 音高。
-        difficulty:        难度等级。
         current_string:    当前声部的上一音所在弦（None=声部首音）。
         current_fret:      当前声部的上一音品位。
         voice:             声部类型（melody/bass/inner）。
@@ -251,7 +250,7 @@ def _extract_melody_notes(
     chords: list[Chord],
     melody_source: Literal["top_note", "highest_density"],
 ) -> list[MidiNote]:
-    """0.5s 分桶旋律提取——和 guitarpro 转换用相同的分组策略，确保 GP8 正常渲染。"""
+    """0.5 quarterLength（八分音符）分桶旋律提取——P1 旋律轨识别失败时的回退策略。"""
     bucket_width = 0.5
     buckets: dict[int, list[MidiNote]] = defaultdict(list)
     for n in notes:
@@ -869,9 +868,6 @@ _DENSITY_FILL_QUOTAS: dict[str, int] = {
 
 
 def _normalize_difficulty(raw: str) -> Difficulty:
-    """容错：将 LLM 可能输出的近义词转为合法 Difficulty 枚举（保留兼容）。"""
-    normalized = _DIFFICULTY_ALIASES.get(raw.lower(), raw.lower())
-    return Difficulty(normalized)
     """容错：将 LLM 可能输出的近义词转为合法 Difficulty 枚举。
 
     如果 Prompt 约束生效，LLM 应直接输出 'beginner'/'intermediate'/'advanced'。
@@ -1052,7 +1048,7 @@ def generate_tab(
 
     处理流程：
       1. 构建指板矩阵
-      2. 提取/接收旋律线（优先使用传入的已识别旋律，回退到旧 top_note 策略）
+      2. 提取/接收旋律线（优先使用 P1 已识别旋律轨，回退到 top_note/highest_density 策略）
       3. 生成低音线（和弦根音/五音 → 4-6 弦）
       4. 填充内声部（和弦剩余音 → 3-4 弦）
       5. 合并三个声部 → 技巧标注

@@ -1,32 +1,15 @@
 # 项目进度记录
 
-> 最后更新：2026-07-28 凌晨
+> 最后更新：2026-07-28
 
 
 ## 当前进行中
 
-- **里程碑**：10. 工程化收尾 → **架构升级（ADR-001）**
-- **状态**：编排引擎方案已决策，待实施
-- **背景**：v1.x 确定性规则生成的谱面质量不可接受——旋律不准、节奏错乱、声部无对话、校验回退失效率高。经系统分析，根因是"将创作任务交给了翻译型规则引擎"，LLM 被锁在门外只做粗粒度回退操作。
-- **决策**：详见 `docs/project-charter.md` ADR-001——Pipeline 底层修复（P1）+ LLM 编曲决策（P2）+ LLM 审听微调（P3）。LLM 做编曲师的判断，规则做乐器的执行。
-- **三阶段计划**：
-
-| 阶段 | 内容 | 预计改动 |
-|------|------|----------|
-| **P1：Pipeline 修复** | ① midi_parser 启发式主旋律轨识别；② 输出区分旋律/伴奏；③ tab_generator 接收旋律（不再猜测）+ 保留原始时序 | 4 个文件 |
-| **P2：LLM 编曲决策** | 新增 Agent 2.5：歌曲摘要 → LLM → per-section ArrangementPlan（density/bass_style/register/techniques） | 5 个文件 |
-| **P3：LLM 审听微调** | 重写校验回退：谱面摘要 → LLM 审听 → 针对性 SectionPlan 调整 → 局部重生成 | 1 个文件（nodes.py） |
-
-- **代码层已完成**（旧方案）：chord voicing、scope override、拍号感知、GM 通道、跳跃密度、空弦泛音、MusicXML 渲染、seed_rag 全量入库
-- **今日完成**：
-  - Chroma 标签统一：10,550 full_tab → chord_only
-  - retriever.py docstring 修正 + PROGRESS.md v2.0 规划
-  - Dockerfile 模型预下载 + docker-compose.yml data volume mount
-  - 短期记忆（刷新恢复）+ 谱面标题（歌名/文件名）
-  - 章程 v1.6→v1.8：CI/CD 交付规范 + v1.0 正式发布里程碑 + ADR-001 架构决策记录
-  - 交付清单：`docs/release-checklist.md`
-- **待办（旧 M10 剩余）**：Docker 瘦身、CI/CD workflow 编写、单元测试、集成测试、README、LangSmith Trace、v1.0 正式发布
-- **待办（新——ADR-001 实施）**：P1→P2→P3 按阶段推进，P1 优先（旋律+节奏是地基）
+- **里程碑**：10. 工程化收尾
+- **状态**：ADR-001 P1/P2 已完成，P3 待实施；guitarpro .gp5 导出已知限制记入后续版本规划
+- **待办（M10 剩余）**：Docker 瘦身、CI/CD workflow 编写、单元测试、集成测试、README、LangSmith Trace、v1.0 正式发布（参照 `docs/release-checklist.md`）
+- **待办（ADR-001 剩余）**：P3——LLM 审听微调（重写校验回退：谱面摘要 → LLM 审听 → SectionPlan 调整 → 局部重生成）
+- **已决策但搁置**：guitarpro.py .gp5 导出质量攻坚 → 移至后续版本规划（前端 MusicXML 渲染正常，.gp5 下载非核心链路）
 
 
 ## 已完成
@@ -51,7 +34,7 @@
   - `src/api/schemas.py`：TabGenerationConfig 新增 `melody_source` 字段
   - **技术发现**：music21 10.x 多项 API 变更（`.flat`→`.flatten()`、`.notes` 属性化、`write('midi')` 不生成同时 onset 和弦）均已修正；测试脚本中的和弦失败是 music21 MIDI 写入限制，不影响真实 MIDI 文件
 - [x] **里程碑 4：Agent 节点开发**（2026-07-18）
-  - `src/agents/nodes.py`：5 Agent 节点 + 入口路由，`caller` 三路分流（首次确定性 / 回退 LLM / 修改确定性执行）
+  - `src/agents/nodes.py`：6 Agent 节点 + 入口路由，`caller` 三路分流（首次确定性 / 回退 LLM / 修改确定性执行）
   - `src/agents/graph.py`：StateGraph 6 节点 + 条件边（`should_retry`）+ MIDI/修改双管线入口路由
   - `src/api/schemas.py`：新增 `ModificationOperation`（5 种原子操作）+ `ModificationPlan`
   - `src/tools/tab_generator.py`：新增 `_resolve_scope()` / `_apply_operations()`（三轮强制执行）/ `_normalize_difficulty()`（LLM 容错）/ `_is_strong_beat()`
@@ -144,6 +127,8 @@
 | 前端渲染方案：GP5 → MusicXML | guitarpro.py 的 GP5 writer 将多 beat 合并为单 beat → alphaTab 无法渲染品位数字 → 前端改为 MusicXML 手写 XML（alphaTab 原生支持），下载仍保留 .gp5 | ✅ |
 | midi_parser 保留 GM 通道信息 | 当前 `track=0, channel=0` 硬编码，`guitar_bias` 评分维度永远拿不到真实乐器信息。改为保留 music21 提取的原始 channel/program，使 seed_rag 的吉他偏向评分实际生效。**⚠ 必须在全量入库之前完成** | ✅ |
 | chord voicing 同步优化 | `tab_generator.py` 后处理：同时间点 fretted 音符 span 检查，超标时重新分配到邻近弦降低品位跨度。解决《黄昏》剩余 20 个 both_fretted span errors | ✅ |
+| guitarpro 双 voice 分离 | TabNote 新增 `voice` 字段（melody/inner/bass），`_tabdata_to_guitarpro_song` 按声部分流至 GP Voice 0/1，加同弦去重 + gap-based duration（cap 于音符实际长度） | ✅ |
+| 产出物质量攻坚 (.gp5) | guitarpro.py GP5 writer（Beat 合并 / Chord name 溢出 / ChordAlteration 腐败）三个耦合 bug 无法在应用层彻底修复。当前状态：前端 MusicXML 正常渲染播放，.gp5 下载基本可用但不保证 GP8 完美打开 | ⬜ v2.0 |
 
 
 ## alphaTab 1.3 已知限制（非 Bug，受版本/格式所限）
@@ -184,6 +169,7 @@
 
 - MP3 / WAV 音频上传扒谱（Demucs + Basic Pitch 链路）
 - 用户账号系统（v2.0；跨设备记忆暂不支持，v1.0 以 localStorage UUID 方案代替）
+- **产出物质量攻坚——.gp5 下载格式兼容**（v2.0）：guitarpro.py GP5 writer 三个耦合 bug（Beat 合并 / Chord name 255 溢出 / ChordAlteration 腐败）无法在应用层彻底修复。当前方案：TabNote voice 字段 + 双 GP voice 分离 + 同弦去重 + min(音符实际长, 间隙) duration，前端 MusicXML 正常，.gp5 下载基本可用。v2.0 可选方案：换 GPX 写入库、手写 GP5 二进制、或下载端切换到 MusicXML
 - **多知识库扩充与格式统一**（v2.0）：当前仅 LMD 单一英文源 + 人工标注核心曲库。后续版本接入中文/日文 MIDI 源（如吉他社、Songsterr 等），统一数据预处理管道与元数据格式，提升非英文歌名检索命中率
 - **外接网络曲库 API 兜底**（v2.0）：RAG 未命中时，通过第三方乐谱 API（如 Songsterr、Ultimate Guitar 的公开接口）作为回退方案，避免"未找到该曲目"的空白体验
 - **真·指弹难度系统**（v2.0）：当前 `Difficulty` 枚举仅控制品位上限（已移除）。真正的指弹难度维度——人工泛音(A.H.)分级标注、击勾弦(H/P)密度控制、AM指法/打板检测、穿插加花密度——全部搁置到后续版本。当前用户通过 QA 修改实现"简化/复杂化"
@@ -197,47 +183,4 @@
 
 - 启动时读取：`CLAUDE.md` → `docs/project-charter.md` → `docs/PROGRESS.md`（此处）
 - 用户开发模式：VSCode + Claude Code 插件，上下文连续，每天关闭窗口第二天无缝继续
-- **⚠️ 7/27 产出物质量攻坚未完成——务必先读 `# 7/27 全天调试总结` 再动手**
-
-
----
-
-## 7/27 全天调试总结（7/28 凌晨写，下次会话先读这里）
-
-### 已完成并保留的改动
-
-| 改动 | 文件 | 说明 |
-|------|------|------|
-| P1 主旋律轨识别（5 维评分+集中度惩罚+note count 权重） | midi_parser.py | 多轨找到正确旋律轨 |
-| P1 最低分 40→25 + margin check 移除 | midi_parser.py | 宁选错不混音 |
-| Agent 2.5（deepseek-chat V3 + JSON 归一化） | nodes.py/graph.py/schemas.py | LLM 编曲决策 |
-| 旋律 timing 保留 | tab_generator.py | 去掉 `start_time = idx * bucket_width` |
-| 短期记忆刷新恢复 | app.js | localStorage tabId |
-| 谱面标题（歌名/文件名） | routes.py | MusicXML work-title |
-| ArrangementPlan JSON 归一化 | nodes.py | "harmonics"→"harmonic" 等模糊匹配 |
-| 低音细分拍点 **已回退** | tab_generator.py | 与 ArrangementPlan 组合后 1642 音符爆炸 |
-
-### guitarpro 8h 战争（根本问题仍未解决）
-
-guitarpro.py GP5 writer 三个耦合 bug：Beat 合并、Chord name 255 溢出、ChordAlteration 腐败。
-天黑一整天尝试了 15+ 次 duration/beat 数/voice 修改全部失败。死循环：时间聚类→小节跳→0.5s 桶→休止符→固定 duration→无效音长→...
-
-**当前最佳可用态**：旋律 0.5s 桶 + `gp_beat.duration = _ql_to_gp_duration(0.25)`。
-无跳音、无无效音长、速度正确。**已知缺陷：每小节末尾有休止符。**
-
-### 根因
-
-不是 guitarpro 的锅——是从 M3 开始三声部混在 TabData 里平铺，导出层无法分离。前端 MusicXML 和下载 .gp5 两条路径各自有各自的 bug。
-
-### 明天方案 A（优先）
-
-guitarpro 双 voice 分离：Voice 0（弦 1-4）+ Voice 1（弦 5-6）。只改 `_tabdata_to_guitarpro_song` 一个函数。
-
-### 今晚最大教训
-
-CLAUDE.md §3 禁止的"猜→改→失败→再猜"循环犯了 ~15 次。第 3 次就应该停下来 diff good/bad .gp5。
-
-### 用户有本地 txt 记录的其他 BUG
-
-（Umbrella 27 小节后静音、前端漏拍/慢、两个格式渲染不一致等——明天从 txt 读取完整清单）
-- 遇到不确定内容时主动询问，确认后再执行
+- 开发过程中遇到不确定内容时主动询问，确认后再执行

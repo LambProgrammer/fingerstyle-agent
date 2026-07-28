@@ -25,7 +25,7 @@
 import logging
 
 from src.rag.chroma_client import query_songs
-from src.rag.indexer import _build_document, _get_embedder
+from src.rag.indexer import _get_embedder
 
 logger = logging.getLogger("retriever")
 
@@ -55,7 +55,6 @@ def retrieve_by_song_name(query: str, top_k: int = 10) -> dict | None:
 
     raw = query_songs(query_emb, n_results=top_k)
     ids_list = raw.get("ids", [[]])
-    docs_list = raw.get("documents", [[]])
     metas_list = raw.get("metadatas", [[]])
 
     if not ids_list or not ids_list[0]:

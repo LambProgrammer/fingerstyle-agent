@@ -83,7 +83,7 @@ class AgentState(TypedDict, total=False):
     """仅主旋律轨音符（ADR-001 P1）。midi_parser 启发式识别后单独分离，
     每个元素为 MidiNote.model_dump() 的 dict（is_melody=True）。
     Agent 3（指法生成）直接使用此列表作为旋律线，不再内部猜测。
-    若 midi_parser 无法识别主旋律轨，此列表为空——下游使用旧 top_note 策略回退。"""
+    若 midi_parser 无法识别主旋律轨，此列表为空——下游使用 top_note 回退策略。"""
 
     # =========================================================================
     # Agent 2.5（LLM 编曲决策）产出 —— nodes.py 写入（ADR-001 P2）
@@ -149,9 +149,9 @@ class AgentState(TypedDict, total=False):
 
     caller: str
     """调用链标记 —— Agent 3 据此判断走哪条分支。
-    'agent_2'=首次生成(确定性)
-    'agent_4'=校验回退(LLM 读 validation.errors → operations → 重生成)
-    'agent_5'=修改路径(确定性读取 Agent 5 已解析的 modification_plan → 执行重生成)
+    'agent_2' / 'agent_2_5' = 首次生成（确定性）
+    'agent_4' = 校验回退（LLM 读 validation.errors → operations → 重生成）
+    'agent_5' = 修改路径（确定性读取 Agent 5 已解析的 modification_plan → 执行重生成）
     由上一个节点在返回 dict 时写入，Agent 3 读取后分流。"""
 
     messages: Annotated[list[AnyMessage], add_messages]

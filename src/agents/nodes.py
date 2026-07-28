@@ -1,4 +1,4 @@
-"""Agent 节点函数 —— LangGraph 工作流中的 5 个处理单元 + 入口路由。
+"""Agent 节点函数 —— LangGraph 工作流中的 6 个处理单元 + 入口路由。
 
 节点职责（对照章程 §4.1）：
   agent_1  旋律解析  确定性：midi_parser.parse_midi()

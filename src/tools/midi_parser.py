@@ -198,7 +198,7 @@ def _identify_melody_track(parts: list[Part]) -> int:
         return -1
     if len(parts) == 1:
         # 单轨 MIDI：旋律嵌在和弦里（钢琴独奏/吉他独奏），无法从轨层面分离。
-        # 应回退到 old top_note 策略——从轨内提取高音线作为旋律。
+        # 应回退到 top_note 策略——从轨内提取高音线作为旋律。
         return -1
 
     scored = [(i, _score_melody_candidacy(p)) for i, p in enumerate(parts)]
@@ -267,7 +267,7 @@ def _extract_from_score(score: Score) -> tuple[list[MidiNote], list[MidiNote], i
     ADR-001 P1：
       1. 对每轨做启发式主旋律评分
       2. 识别主旋律轨 → 旋律轨音符标记 is_melody=True
-      3. 无法识别时回退 → melody_notes 为空列表（下游使用全轨 top_note 策略）
+      3. 无法识别时回退 → melody_notes 为空列表（下游使用全轨 top_note 回退策略）
 
     Returns:
         (all_notes, melody_notes, bpm)——all_notes 含所有轨（供和弦分析），

@@ -124,7 +124,7 @@
 
 ## 架构决策记录（ADR-001）：编排引擎升级 —— 确定性规则 → LLM 辅助编曲
 
-> **日期**：2026-07-26 | **状态**：已决策，待实施 | **影响范围**：Agent 2.5（新）+ Agent 3 + tab_generator.py + midi_parser.py
+> **日期**：2026-07-26 | **状态**：P1/P2 已实施，P3 待实施 | **影响范围**：Agent 2.5（新）+ Agent 3 + tab_generator.py + midi_parser.py
 
 ### 背景
 

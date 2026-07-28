@@ -59,8 +59,8 @@ class MidiNote(BaseModel):
     """
 
     midi_number: int = Field(..., ge=0, le=127, description="MIDI 音符号（0-127，中央 C = 60）")
-    start_time: float = Field(..., ge=0, description="音符起始时间（秒），MIDI tick → 秒换算后的值")
-    duration: float = Field(..., gt=0, description="音符持续时长（秒）")
+    start_time: float = Field(..., ge=0, description="音符起始时间（quarter lengths，music21 offset）")
+    duration: float = Field(..., gt=0, description="音符持续时长（quarter lengths）")
     velocity: int = Field(default=64, ge=0, le=127, description="按键力度")
     track: int = Field(default=0, ge=0, description="MIDI 音轨编号")
     channel: int = Field(default=0, ge=0, le=15, description="MIDI 通道号")
@@ -77,8 +77,8 @@ class Chord(BaseModel):
     root: str = Field(..., description="根音音名，如 'C'、'F#'")
     quality: str = Field(..., description="和弦性质，如 'maj7'、'm'、'7'、'dim'")
     midi_numbers: list[int] = Field(..., description="构成和弦的所有 MIDI 音符号")
-    start_time: float = Field(..., ge=0, description="和弦起始时间（秒）")
-    duration: float = Field(..., gt=0, description="和弦覆盖时长（秒），即到下一和弦的间隔")
+    start_time: float = Field(..., ge=0, description="和弦起始时间（quarter lengths）")
+    duration: float = Field(..., gt=0, description="和弦覆盖时长（quarter lengths），即到下一和弦的间隔")
 
 
 class TabNote(BaseModel):
@@ -90,8 +90,8 @@ class TabNote(BaseModel):
 
     string: int = Field(..., ge=1, le=6, description="吉他弦编号（1=高音E，6=低音E）")
     fret: int = Field(..., ge=0, le=24, description="品位编号（0=空弦，最大 24 品）")
-    start_time: float = Field(..., ge=0, description="音符起始时间（秒）")
-    duration: float = Field(..., gt=0, description="音符持续时长（秒）")
+    start_time: float = Field(..., ge=0, description="音符起始时间（quarter lengths）")
+    duration: float = Field(..., gt=0, description="音符持续时长（quarter lengths）")
     technique: Technique = Field(default=Technique.NONE, description="演奏技巧标注（H/P/B/S/A.H./none）")
     voice: str = Field(default="", description="声部标注：melody=旋律 / inner=内声部 / bass=低音。空字符串=未标记")
 
@@ -149,7 +149,7 @@ class TabGenerationConfig(BaseModel):
     外加一个可空的变调夹推荐位（Agent 4 可能回填）。
     """
 
-    difficulty: Difficulty = Field(default=Difficulty.BEGINNER, description="演奏难度（v2.0 扩展：当前版本所有谱面统一人手极限约束，此字段保留用于未来指弹技巧分级）")
+    difficulty: Difficulty = Field(default=Difficulty.BEGINNER, description="演奏难度（当前统一人手极限约束 fret≤15；QA 修改时可触发 per-measure 品位上限分级）")
     style: Style = Field(..., description="指弹风格")
     tuning: list[str] = Field(
         default_factory=lambda: ["E2", "A2", "D3", "G3", "B3", "E4"],
@@ -159,7 +159,8 @@ class TabGenerationConfig(BaseModel):
     melody_source: Literal["top_note", "highest_density"] = Field(
         default="top_note",
         description=(
-            "旋律提取策略：'top_note'=每拍取最高音（适合钢琴独奏MIDI）；"
+            "旋律提取回退策略（仅当 P1 MIDI 主旋律轨识别失败时使用）："
+            "'top_note'=每拍取最高音（适合钢琴独奏MIDI）；"
             "'highest_density'=跟踪音符密度最高的音高线（更接近人声旋律线）"
         ),
     )
