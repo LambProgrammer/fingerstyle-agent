@@ -451,9 +451,10 @@ def _fill_gp_voice(voice, notes: list[TabNote], measure_duration: float = 4.0,
                    measure_start_ql: float = 0.0) -> None:
     """将一组 TabNote 填入一个 guitarpro Voice。
 
-    beat duration 使用间隔时长：每个 beat 的 duration = 到下一个 beat 的时间差。
-    最后一个 beat 的 duration = 到小节末尾的时间差。
-    这样 beat 之间没有空隙，无需休止符填充。
+    beat duration = min(音符实际长度, 到下一个 beat 的间隙)。
+    - 密集段落：间隙 ≈ 实际长度 → 自然衔接，无休止符
+    - 稀疏段落：实际长度 < 间隙 → 音符保持原长度，剩余空间自然留白
+    同时截断到小节末尾，防止越界。
     """
     from guitarpro import models as gm
 
@@ -471,13 +472,19 @@ def _fill_gp_voice(voice, notes: list[TabNote], measure_duration: float = 4.0,
         gp_beat = gm.Beat(voice=voice)
         gp_beat.start = int(rel_start * 960)
 
-        # 间隔时长：填满到下一个 beat 或小节末尾
+        # 音符实际长度（取桶内最大，quarter lengths）
+        note_dur_ql = max(tn.duration for tn in notes_at_t)
+
+        # 到下一个 beat 或小节末尾的间隙
         if idx + 1 < len(sorted_times):
             gap_ql = sorted_times[idx + 1] - start_time
         else:
             gap_ql = measure_duration - rel_start
 
-        gp_beat.duration = _ql_to_gp_duration(gap_ql)
+        # 不拉长到超过音符实际长度，也不超过可用间隙
+        beat_dur_ql = min(note_dur_ql, gap_ql)
+
+        gp_beat.duration = _ql_to_gp_duration(beat_dur_ql)
 
         for tn in notes_at_t:
             gp_note = gm.Note(beat=gp_beat, value=tn.fret, string=tn.string)
