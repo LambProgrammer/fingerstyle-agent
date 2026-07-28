@@ -93,6 +93,7 @@ class TabNote(BaseModel):
     start_time: float = Field(..., ge=0, description="音符起始时间（秒）")
     duration: float = Field(..., gt=0, description="音符持续时长（秒）")
     technique: Technique = Field(default=Technique.NONE, description="演奏技巧标注（H/P/B/S/A.H./none）")
+    voice: str = Field(default="", description="声部标注：melody=旋律 / inner=内声部 / bass=低音。空字符串=未标记")
 
 
 class TabMeasure(BaseModel):

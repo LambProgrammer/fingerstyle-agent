@@ -306,7 +306,7 @@ def download(tab_id: str):
                     "Content-Disposition": f'attachment; filename="{tab_id[:8]}.gp5"',
                 },
             )
-        except Exception as exc:
+        except Exception:
             raise HTTPException(
                 500,
                 "guitarpro.py 无法处理该谱面的 .gp5 导出（已知第三方库限制）。"
@@ -380,44 +380,89 @@ def _tabdata_to_guitarpro_song(tab: TabData) -> guitarpro.models.Song:
     """将 TabData 转换为 guitarpro Song 对象，用于导出 .gp5。
 
     guitarpro 层级：Song → Track → Measure(header) → Voice → Beat → Note
-    每个子对象构造时传入父级引用。
+
+    方案 B 双 voice 分离：
+      Voice 0（弦 1-3）：旋律 + 内声部（voice="melody"|"inner"|""）
+      Voice 1（弦 4-6）：低音线（voice="bass"）
+    每个 voice 独立建桶、独立设 beat，绕过 guitarpro.py 单 voice 过载导致的
+    beat 合并 / chord name 溢出 / ChordAlteration 腐败三个耦合 bug。
     """
     from guitarpro import models as gm
 
     gp_song = gm.Song()
     gp_song.tempo = tab.tempo
-    # guitarpro 默认创建 1 个 Track + 每 Measure 2 个 Voice，直接复用默认
     track = gp_song.tracks[0]
     track.name = "Fingerstyle Guitar"
     track.strings = _build_gp_strings(tab.tuning)
     track.settings.notation = False  # .gp5 下载时只渲染六线谱
     track.measures.clear()
 
+    # 声部优先级：去重用（高值优先保留）
+    _VOICE_PRIORITY = {"melody": 3, "inner": 2, "bass": 1, "": 0}
+
     for m in tab.measures:
         header = gm.MeasureHeader()
         gp_measure = gm.Measure(track=track, header=header)
-        voice = gp_measure.voices[0]
 
-        buckets: dict[float, list[TabNote]] = {}
-        for tn in m.notes:
-            buckets.setdefault(tn.start_time, []).append(tn)
+        # 去重：同一弦同一时刻只保留最高优先级声部的音符
+        deduped_notes = _dedup_same_string(m.notes, _VOICE_PRIORITY)
 
-        for start_time in sorted(buckets):
-            notes_at_t = buckets[start_time]
-            gp_beat = gm.Beat(voice=voice)
-            gp_beat.start = int(start_time * 960)
-            gp_beat.duration = _ql_to_gp_duration(0.25)
+        # 按 voice 字段分流（空字符串 → Voice 0，兼容旧数据）
+        voice0_notes = [n for n in deduped_notes if n.voice in ("melody", "inner", "")]
+        voice1_notes = [n for n in deduped_notes if n.voice == "bass"]
 
-            for tn in notes_at_t:
-                gp_note = gm.Note(beat=gp_beat, value=tn.fret, string=tn.string)
-                gp_note.effect = _technique_to_gp_effect(tn.technique)
-                gp_beat.notes.append(gp_note)
-
-            voice.beats.append(gp_beat)
+        _fill_gp_voice(gp_measure.voices[0], voice0_notes)
+        _fill_gp_voice(gp_measure.voices[1], voice1_notes)
 
         track.measures.append(gp_measure)
 
     return gp_song
+
+
+def _dedup_same_string(notes: list[TabNote], priority: dict[str, int]) -> list[TabNote]:
+    """同一弦同一时刻冲突时，保留优先级最高的音符（melody > inner > bass）。
+
+    吉他每根弦同时只能弹一个音——此函数修复 tab_generator 内声部与旋律
+    在同弦冲突的边界情况，同时避免触发 guitarpro.py 多 voice 写入 bug。
+    """
+    groups: dict[tuple[float, int], list[TabNote]] = {}
+    for n in notes:
+        key = (n.start_time, n.string)
+        groups.setdefault(key, []).append(n)
+
+    result: list[TabNote] = []
+    for key, group in groups.items():
+        if len(group) == 1:
+            result.append(group[0])
+        else:
+            best = max(group, key=lambda n: priority.get(n.voice, 0))
+            result.append(best)
+    return result
+
+
+def _fill_gp_voice(voice, notes: list[TabNote]) -> None:
+    """将一组 TabNote 填入一个 guitarpro Voice——分桶 beat 创建逻辑。"""
+    from guitarpro import models as gm
+
+    if not notes:
+        return
+
+    buckets: dict[float, list[TabNote]] = {}
+    for tn in notes:
+        buckets.setdefault(tn.start_time, []).append(tn)
+
+    for start_time in sorted(buckets):
+        notes_at_t = buckets[start_time]
+        gp_beat = gm.Beat(voice=voice)
+        gp_beat.start = int(start_time * 960)
+        gp_beat.duration = _ql_to_gp_duration(0.25)
+
+        for tn in notes_at_t:
+            gp_note = gm.Note(beat=gp_beat, value=tn.fret, string=tn.string)
+            gp_note.effect = _technique_to_gp_effect(tn.technique)
+            gp_beat.notes.append(gp_note)
+
+        voice.beats.append(gp_beat)
 
 
 def _tabdata_to_musicxml(tab: TabData, title: str = "") -> str:
@@ -427,8 +472,6 @@ def _tabdata_to_musicxml(tab: TabData, title: str = "") -> str:
     标签，alphaTab 渲染为六线谱品位数字。
     """
     # 计算每小节起始时间
-    ts = tab.measures[0].time_signature if tab.measures else (4, 4)
-    measure_dur = float(ts[0])
     divisions = 960  # ticks per quarter note
 
     parts = []
@@ -437,7 +480,7 @@ def _tabdata_to_musicxml(tab: TabData, title: str = "") -> str:
     parts.append('  "http://www.musicxml.org/dtds/partwise.dtd">')
     parts.append('<score-partwise version="4.0">')
     parts.append(f'  <work><work-title>{title or "Fingerstyle Tab"}</work-title></work>')
-    parts.append(f'  <identification><creator type="composer">Fingerstyle Agent</creator></identification>')
+    parts.append('  <identification><creator type="composer">Fingerstyle Agent</creator></identification>')
 
     # --- part-list ---
     parts.append('  <part-list>')
@@ -456,8 +499,8 @@ def _tabdata_to_musicxml(tab: TabData, title: str = "") -> str:
             parts.append(f'        <time><beats>{m.time_signature[0]}</beats>')
             parts.append(f'        <beat-type>{m.time_signature[1]}</beat-type></time>')
             parts.append('        <clef><sign>TAB</sign><line>5</line></clef>')
-            parts.append(f'        <staff-details>')
-            parts.append(f'          <staff-lines>6</staff-lines>')
+            parts.append('        <staff-details>')
+            parts.append('          <staff-lines>6</staff-lines>')
             for i, name in enumerate(tab.tuning):
                 import music21.note as m21note  # type: ignore[import-untyped]
                 pitch = m21note.Note(name).pitch.midi
@@ -473,18 +516,18 @@ def _tabdata_to_musicxml(tab: TabData, title: str = "") -> str:
                 parts.append(f'            <tuning-step>{step}</tuning-step>')
                 parts.append(f'            <tuning-alter>{alter}</tuning-alter>')
                 parts.append(f'            <tuning-octave>{pitch // 12 - 1}</tuning-octave>')
-                parts.append(f'          </staff-tuning>')
-            parts.append(f'          <capo>0</capo>')
-            parts.append(f'        </staff-details>')
+                parts.append('          </staff-tuning>')
+            parts.append('          <capo>0</capo>')
+            parts.append('        </staff-details>')
             parts.append('      </attributes>')
             # 速度
-            parts.append(f'      <direction placement="above">')
-            parts.append(f'        <direction-type>')
-            parts.append(f'          <metronome><beat-unit>quarter</beat-unit>')
+            parts.append('      <direction placement="above">')
+            parts.append('        <direction-type>')
+            parts.append('          <metronome><beat-unit>quarter</beat-unit>')
             parts.append(f'          <per-minute>{tab.tempo}</per-minute></metronome>')
-            parts.append(f'        </direction-type>')
+            parts.append('        </direction-type>')
             parts.append(f'        <sound tempo="{tab.tempo}"/>')
-            parts.append(f'      </direction>')
+            parts.append('      </direction>')
         else:
             parts.append(f'    <measure number="{m.number}" implicit="no">')
 
@@ -512,12 +555,12 @@ def _tabdata_to_musicxml(tab: TabData, title: str = "") -> str:
             parts.append('      <note>')
             if is_chord:
                 parts.append('        <chord/>')
-            parts.append(f'        <pitch>')
+            parts.append('        <pitch>')
             parts.append(f'          <step>{step}</step>')
             if alter != 0:
                 parts.append(f'          <alter>{alter}</alter>')
             parts.append(f'          <octave>{octave}</octave>')
-            parts.append(f'        </pitch>')
+            parts.append('        </pitch>')
             parts.append(f'        <duration>{dur_ticks}</duration>')
             parts.append('        <type>eighth</type>')
             parts.append('        <notations>')

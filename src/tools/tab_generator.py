@@ -328,6 +328,7 @@ def _generate_bass_line(
                 string=s, fret=f,
                 start_time=chord.start_time, duration=chord.duration,
                 technique=Technique.NONE,
+                voice="bass",
             )
         )
         current_string, current_fret = s, f
@@ -483,6 +484,7 @@ def _generate_melody_line(
                 string=s, fret=f,
                 start_time=mn.start_time, duration=mn.duration,
                 technique=Technique.NONE,
+                voice="melody",
             )
         )
         current_string, current_fret = s, f
@@ -565,6 +567,7 @@ def _generate_inner_voices(
                     string=s, fret=f,
                     start_time=chord.start_time, duration=chord.duration,
                     technique=Technique.NONE,
+                    voice="inner",
                 )
             )
             current_string, current_fret = s, f
