@@ -1,0 +1,25 @@
+# Python virtual environment（容器内自有）
+.venv/
+**/__pycache__/
+*.py[oc]
+
+# Secrets
+.env
+
+# Dev / test / config files（不需要打进镜像）
+*.md
+.git/
+.gitignore
+.dockerignore
+.idea/
+.vscode/
+
+# Runtime data（运行时由 volume 挂载提供）
+data/
+
+# Test & eval suites
+tests/
+evals/
+
+# Scripts（一次性数据准备工具，运行时不需要）
+scripts/

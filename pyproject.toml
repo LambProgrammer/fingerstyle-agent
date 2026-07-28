@@ -1,0 +1,36 @@
+[project]
+name = "fingerstyle-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "chromadb>=1.5.9",
+    "fastapi>=0.139.2",
+    "huggingface-hub>=1.24.0",
+    "joblib>=1.5.3",
+    "langchain>=1.3.14",
+    "langchain-deepseek>=1.1.0",
+    "langgraph>=1.2.9",
+    "langgraph-checkpoint-postgres>=3.1.0",
+    "langgraph-checkpoint-redis>=0.5.1",
+    "langsmith>=0.10.5",
+    "music21>=10.5.0",
+    "numpy>=2.5.1",
+    "psycopg[binary]>=3.3.4",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "pyguitarpro>=0.11",
+    "pytest>=9.1.1",
+    "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.32",
+    "redis>=7.4.1",
+    "requests>=2.34.2",
+    "ruff>=0.15.22",
+    "scikit-learn>=1.9.0",
+    "sentence-transformers>=5.6.0",
+    "torch>=2.13.0",
+    "transformers>=5.14.1",
+    "uvicorn>=0.51.0",
+]

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>指弹吉他谱生成 —— 多 Agent 系统</title>
+    <link rel="stylesheet" href="style.css">
+    <!--
+      alphaTab — 六线谱渲染引擎 + Web Audio 播放器。
+      JS 内联了所有 CSS，不需要独立的 .css 文件。
+      国内如 jsDelivr 不通，可换用 unpkg：
+      https://unpkg.com/@coderline/alphatab@1.2.3/dist/alphaTab.min.js
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3/dist/alphaTab.min.js"></script>
+    <!--
+      手动注入 alphaTab 字体 CSS，绕开 alphaTab 1.3 的字体加载超时。
+      Bravura 是 alphaTab 渲染六线谱品位数字所需的 SMuFL 音乐字体。
+    -->
+    <style>
+      @font-face {
+        font-family: 'alphaTab';
+        src: url('https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3/dist/font/Bravura.woff2') format('woff2'),
+             url('https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3/dist/font/Bravura.woff') format('woff');
+        font-display: block;
+      }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎸 指弹吉他谱生成系统</h1>
+        <p>MIDI 上传 → 多 Agent 协作 → 六线谱渲染 + 播放</p>
+    </header>
+
+    <main>
+        <!-- ====== 左侧控制面板 ====== -->
+        <aside id="control-panel">
+            <!-- ① 上传 MIDI -->
+            <section id="upload-section">
+                <h2>① 上传 MIDI 文件</h2>
+                <div id="drop-zone">
+                    <p>拖拽文件到此处，或点击选择</p>
+                    <input type="file" id="file-input" accept=".mid,.midi,.gp5,.gpx" hidden>
+                </div>
+                <p id="file-name" class="hint"></p>
+            </section>
+
+            <!-- ② 歌名搜索 -->
+            <section id="search-section">
+                <h2>② 或搜索歌名</h2>
+                <div class="input-row">
+                    <input type="text" id="song-search" placeholder="歌名 + 歌手名，检索更准确">
+                    <button id="search-btn">🔍</button>
+                </div>
+                <p class="hint">支持中 / 日 / 英文，直接输入关键词即可，不用加问句</p>
+            </section>
+
+            <!-- ③ 配置参数：风格下拉 + 定弦下拉 + 偏好开关 -->
+            <section id="config-section">
+                <h2>③ 配置参数</h2>
+                <!-- 偏好开关：打开后下拉框禁用，使用 Redis 中保存的上次偏好 -->
+                <div id="pref-toggle-row" class="hidden">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="pref-toggle">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">使用上次偏好</span>
+                        <span id="pref-summary" class="hint"></span>
+                    </label>
+                </div>
+                <div class="config-grid">
+                    <label>风格
+                        <select id="style-select">
+                            <option value="jpop">日系指弹 (J-Pop)</option>
+                            <option value="american_folk">美式指弹 (American Folk)</option>
+                            <option value="pop_adaptation">流行改编 (Pop)</option>
+                        </select>
+                    </label>
+                    <label>定弦
+                        <select id="tuning-select">
+                            <option value="E2,A2,D3,G3,B3,E4">标准调弦 (EADGBE)</option>
+                            <option value="D2,A2,D3,G3,B3,E4">Drop D (DADGBE)</option>
+                            <option value="D2,A2,D3,G3,A3,D4">DADGAD</option>
+                            <option value="D2,G2,D3,G3,B3,D4">Open G (DGDGBD)</option>
+                            <option value="D2,A2,D3,F#3,A3,D4">Open D (DADF#AD)</option>
+                        </select>
+                    </label>
+                </div>
+                <button id="generate-btn" class="primary-btn">🎵 生成指弹谱</button>
+            </section>
+
+            <!-- 状态提示 + 谱面元信息 -->
+            <section id="status-section">
+                <p id="status-msg"></p>
+                <div id="meta-info" class="hidden">
+                    <span id="meta-key"></span>
+                    <span id="meta-tempo"></span>
+                    <span id="meta-measures"></span>
+                    <span id="meta-tuning"></span>
+                </div>
+            </section>
+
+            <!-- ④ QA 修改：生成成功后才显示 -->
+            <section id="qa-section" class="hidden">
+                <h2>④ 修改谱面</h2>
+                <div class="input-row">
+                    <input type="text" id="qa-input" placeholder="如：副歌简化一点 / 加滑音 / 低八度">
+                    <button id="modify-btn">修改</button>
+                </div>
+            </section>
+
+            <!-- 下载 .gp5：生成成功后才显示 -->
+            <section id="download-section" class="hidden">
+                <button id="download-btn">⬇ 下载谱面文件</button>
+            </section>
+        </aside>
+
+        <!-- ====== 右侧谱面渲染区 ====== -->
+        <section id="tab-panel">
+            <!-- alphaTab 不提供内置播放 UI，需要自己写播放控制栏 -->
+            <div id="player-bar" class="hidden">
+                <button id="btn-play" title="播放 / 暂停">▶</button>
+                <button id="btn-stop" title="停止">⏹</button>
+                <span id="time-label">00:00 / 00:00</span>
+            </div>
+            <!--
+              alphaTab 要求的 DOM 结构：.at-wrap > .at-main
+              AlphaTabApi 构造函数接收 .at-main 元素，自动在 .at-wrap 内创建
+              视口（viewport）和滚动容器。
+            -->
+            <div class="at-wrap">
+                <div class="at-main" id="tab-container">
+                    <p id="placeholder">← 上传 MIDI 文件或搜索歌名，生成指弹谱</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
