@@ -399,6 +399,9 @@ def _tabdata_to_guitarpro_song(tab: TabData) -> guitarpro.models.Song:
 
     # 声部优先级：去重用（高值优先保留）
     _VOICE_PRIORITY = {"melody": 3, "inner": 2, "bass": 1, "": 0}
+    # 小节时长（quarter lengths）：后续累加计算每小节在曲中的绝对起始位置
+    _measure_dur = tab.measures[0].time_signature[0] if tab.measures else 4
+    _song_time = 0.0  # 累加器：当前小节在曲中的绝对起始 quarter length
 
     for m in tab.measures:
         header = gm.MeasureHeader()
@@ -411,10 +414,14 @@ def _tabdata_to_guitarpro_song(tab: TabData) -> guitarpro.models.Song:
         voice0_notes = [n for n in deduped_notes if n.voice in ("melody", "inner", "")]
         voice1_notes = [n for n in deduped_notes if n.voice == "bass"]
 
-        _fill_gp_voice(gp_measure.voices[0], voice0_notes)
-        _fill_gp_voice(gp_measure.voices[1], voice1_notes)
+        # 当前小节的实际时长（支持变拍号）
+        md = float(m.time_signature[0])
+
+        _fill_gp_voice(gp_measure.voices[0], voice0_notes, md, _song_time)
+        _fill_gp_voice(gp_measure.voices[1], voice1_notes, md, _song_time)
 
         track.measures.append(gp_measure)
+        _song_time += md
 
     return gp_song
 
@@ -440,8 +447,14 @@ def _dedup_same_string(notes: list[TabNote], priority: dict[str, int]) -> list[T
     return result
 
 
-def _fill_gp_voice(voice, notes: list[TabNote]) -> None:
-    """将一组 TabNote 填入一个 guitarpro Voice——分桶 beat 创建逻辑。"""
+def _fill_gp_voice(voice, notes: list[TabNote], measure_duration: float = 4.0,
+                   measure_start_ql: float = 0.0) -> None:
+    """将一组 TabNote 填入一个 guitarpro Voice。
+
+    beat duration 使用间隔时长：每个 beat 的 duration = 到下一个 beat 的时间差。
+    最后一个 beat 的 duration = 到小节末尾的时间差。
+    这样 beat 之间没有空隙，无需休止符填充。
+    """
     from guitarpro import models as gm
 
     if not notes:
@@ -451,11 +464,20 @@ def _fill_gp_voice(voice, notes: list[TabNote]) -> None:
     for tn in notes:
         buckets.setdefault(tn.start_time, []).append(tn)
 
-    for start_time in sorted(buckets):
+    sorted_times = sorted(buckets)
+    for idx, start_time in enumerate(sorted_times):
         notes_at_t = buckets[start_time]
+        rel_start = start_time - measure_start_ql  # 小节内相对位置（quarter lengths）
         gp_beat = gm.Beat(voice=voice)
-        gp_beat.start = int(start_time * 960)
-        gp_beat.duration = _ql_to_gp_duration(0.25)
+        gp_beat.start = int(rel_start * 960)
+
+        # 间隔时长：填满到下一个 beat 或小节末尾
+        if idx + 1 < len(sorted_times):
+            gap_ql = sorted_times[idx + 1] - start_time
+        else:
+            gap_ql = measure_duration - rel_start
+
+        gp_beat.duration = _ql_to_gp_duration(gap_ql)
 
         for tn in notes_at_t:
             gp_note = gm.Note(beat=gp_beat, value=tn.fret, string=tn.string)
