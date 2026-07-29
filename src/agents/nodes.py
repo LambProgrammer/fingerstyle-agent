@@ -3,17 +3,18 @@
 节点职责（对照章程 §4.1）：
   agent_1  旋律解析  确定性：midi_parser.parse_midi()
   agent_2  和声编排  确定性：music21_wrapper.analyze_chords()
-  agent_3  指法生成  三路分支：
-             caller=agent_2 → 首次确定性生成（不花 token）
-             caller=agent_4 → 校验回退（LLM 读 validation.errors → operations → 重生成）
+  agent_3  指法生成  三路分支（ADR-001 P3：回退路径升级为 LLM 审听）：
+             caller=agent_2 / agent_2_5 → 首次确定性生成（不花 token）
+             caller=agent_4 → 校验回退（谱面摘要 → LLM 审听 → ArrangementPlan 调整 → 重生成）
              caller=agent_5 → 修改路径（LLM 读 modify_instruction → operations → 重生成）
   agent_4  物理校验  确定性：tab_validator.validate() + 条件回退判定
   agent_5  修改理解  LLM：用户指令 → ModificationPlan（operations 列表）
 
-LLM 修正的核心机制（operations 驱动）：
-  不再通过 LLM 直接操作 MIDI 数值，而是让 LLM 输出结构化 ModificationPlan
-  → _apply_operations() 执行 → generate_tab() 重生成。LLM 只做"语义→操作"翻译，
-  确定性代码做"操作→数据修改"，闭环完整且可靠。
+LLM 参与的两个层级（ADR-001）：
+  编曲层（Agent 2.5 + Agent 4→3 回退）：LLM 审听谱面摘要 → 输出/调整 ArrangementPlan
+    → generate_tab() 重生成。LLM 做编曲判断，规则做乐器执行。
+  执行层（Agent 5）：LLM 解析用户指令 → ModificationPlan（原子操作）
+    → _apply_operations() 执行 → generate_tab() 重生成。
 """
 
 import json
@@ -30,6 +31,7 @@ from src.api.schemas import (
     HarmonyAnalysis,
     MidiNote,
     ModificationPlan,
+    SectionPlan,
     Style,
     TabData,
     TabGenerationConfig,
@@ -276,6 +278,53 @@ dynamic（力度）: "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff"
 """
 
 
+_ARRANGEMENT_AUDITION_PROMPT = """你是一位指弹吉他编曲审听师。你会收到一份谱面审听报告，
+包含每个段落的编曲参数、声部分布、以及物理校验结果。
+
+你的任务：找出哪些段落的编排参数导致了音乐问题，并调整它们。
+
+## 可调参数
+
+melody_register（旋律音域）: "low" | "mid" | "high"
+  - 跳跃密度高/跨度超标多 → 降低音域（high→mid→low）
+  - 低把位拥挤 → 升高音域（low→mid→high）
+
+density（填充密度）: "sparse" | "medium" | "full"
+  - 声部过密/跳跃过多 → 降低密度（full→medium→sparse）
+  - 声部单薄 → 提高密度
+
+bass_style（低音模式）: "root_only" | "alternating" | "travis_picking"
+  - 低音区拥挤 → 改为 root_only
+
+techniques（技巧）: 从 ["hammer_on", "pull_off", "slide", "harmonic", "strumming"] 中选择 0-3 个
+dynamic（力度）: "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff"
+
+## 输出格式
+
+严格输出 JSON，不要其他内容：
+{
+  "sections": [
+    {
+      "measure_start": 5, "measure_end": 20,
+      "label": "verse",
+      "density": "medium", "bass_style": "alternating",
+      "melody_register": "low", "techniques": [],
+      "dynamic": "mf"
+    }
+  ],
+  "summary": "一句话描述调整思路"
+}
+
+## 调整原则
+
+- **只列出需要修改的段落**，不需要修改的段落不要列出来
+- 保留原段落的 measure_start/measure_end/label 不变，只改有问题的参数
+- 最多调整 3 个段落
+- 所有字符串选项必须使用上面列出的精确值
+- 不要为了调而调——如果报告中某段落没有明显的物理问题，不要改它
+"""
+
+
 def _build_song_summary(
     harmony_dict: dict,
     melody_notes_raw: list[dict],
@@ -505,15 +554,15 @@ def _parse_arrangement_plan(text: str) -> ArrangementPlan | None:
 
 
 # =========================================================================
-# Agent 3：指法生成（三路分支，operations 驱动）
+# Agent 3：指法生成（三路分支，编曲层 ArrangementPlan + 执行层 operations）
 # =========================================================================
 
 
 def agent_3_tab_generate(state: AgentState) -> dict:
     """指法生成 —— 根据 caller 字段分流。
 
-    caller=agent_2 → 确定性生成（不调 LLM）
-    caller=agent_4 → LLM 读 validation.errors → operations → 重生成
+    caller=agent_2 / agent_2_5 → 首次确定性生成（不调 LLM）
+    caller=agent_4 → 谱面摘要 → LLM 审听 → ArrangementPlan 调整 → 重生成（P3）
     caller=agent_5 → 确定性读取 Agent 5 已解析的 modification_plan → 执行重生成
     """
     caller = state.get("caller", "agent_2")
@@ -559,6 +608,145 @@ def agent_3_tab_generate(state: AgentState) -> dict:
     return {"error": f"未知 caller: {caller}", "status": "error_agent_3"}
 
 
+def _build_tab_summary(
+    tab_data: TabData,
+    validation: ValidationResult,
+    arrangement: ArrangementPlan | None,
+    harmony: HarmonyAnalysis,
+) -> str:
+    """生成谱面审听报告——LLM 审听的输入文本。
+
+    按段落统计：声部分布、跳跃密度、违规数量、品位分布。
+    每个段落附当前编排参数，供 LLM 对照物理问题做调整决策。
+    """
+    lines: list[str] = []
+    lines.append("=== 谱面审听报告 ===")
+    lines.append(f"BPM: {harmony.bpm} | 调性: {harmony.key} | "
+                 f"{len(tab_data.measures)} 小节")
+    lines.append("")
+
+    all_notes = [n for m in tab_data.measures for n in m.notes]
+    if not all_notes:
+        return "（谱面无音符）"
+
+    # 无 ArrangementPlan 时构造一个全曲默认段落
+    if not arrangement or not arrangement.sections:
+        total_measures = len(tab_data.measures)
+        sections = [
+            SectionPlan(
+                measure_start=1, measure_end=total_measures,
+                label="full_song", density="medium",
+                bass_style="alternating", melody_register="mid",
+                techniques=[], dynamic="mf",
+            )
+        ]
+    else:
+        sections = arrangement.sections
+
+    for sec in sections:
+        s_start = sec.measure_start
+        s_end = min(sec.measure_end, len(tab_data.measures))
+        sec_notes = [
+            n for m in tab_data.measures
+            if s_start <= m.number <= s_end
+            for n in m.notes
+        ]
+        if not sec_notes:
+            continue
+
+        # 声部统计
+        n_bass = sum(1 for n in sec_notes if n.voice == "bass")
+        n_inner = sum(1 for n in sec_notes if n.voice == "inner")
+        n_melody = sum(1 for n in sec_notes if n.voice == "melody")
+
+        # 跳跃密度：相邻音符的弦号变化比例
+        sec_sorted = sorted(sec_notes, key=lambda n: (n.start_time, n.string))
+        crosses = sum(
+            1 for i in range(len(sec_sorted) - 1)
+            if sec_sorted[i].string != sec_sorted[i + 1].string
+        )
+        jump_pct = crosses / len(sec_sorted) * 100 if len(sec_sorted) > 1 else 0
+
+        # 跨度违规
+        span_errors = sum(
+            1 for e in (validation.errors or [])
+            if s_start <= e.measure <= s_end and "跨度" in e.description
+        )
+        fret_errors = sum(
+            1 for e in (validation.errors or [])
+            if s_start <= e.measure <= s_end and "品位" in e.description
+        )
+
+        # 品位分布
+        frets = [n.fret for n in sec_notes if n.fret > 0]
+        if frets:
+            low = sum(1 for f in frets if f <= 5)
+            mid = sum(1 for f in frets if 6 <= f <= 12)
+            high = sum(1 for f in frets if f >= 13)
+            fret_dist = (
+                f"低把位(0-5) {low / len(frets) * 100:.0f}% | "
+                f"中把位(6-12) {mid / len(frets) * 100:.0f}% | "
+                f"高把位(13+) {high / len(frets) * 100:.0f}%"
+            )
+        else:
+            fret_dist = "无 fretted 音符"
+
+        lines.append(
+            f"--- 段落: {sec.label} (M{s_start}-{s_end}) ---"
+        )
+        lines.append(
+            f"  设置: density={sec.density}, bass={sec.bass_style}, "
+            f"register={sec.melody_register}, dynamic={sec.dynamic}"
+        )
+        lines.append(
+            f"  声部: bass={n_bass}, inner={n_inner}, "
+            f"melody={n_melody} (共{len(sec_notes)}音符)"
+        )
+        lines.append(
+            f"  跳跃密度: {jump_pct:.0f}% | "
+            f"跨度违规: {span_errors} | 品位违规: {fret_errors}"
+        )
+        lines.append(f"  品位分布: {fret_dist}")
+        lines.append("")
+
+    # 校验明细
+    if validation.errors:
+        lines.append("=== 校验错误明细 ===")
+        for e in validation.errors:
+            lines.append(f"  - M{e.measure}: {e.description}")
+        lines.append("")
+
+    if validation.warnings:
+        lines.append("=== 校验警告 ===")
+        for w in validation.warnings:
+            lines.append(f"  - {w}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _merge_arrangement(
+    original: ArrangementPlan | None,
+    adjusted: ArrangementPlan | None,
+) -> ArrangementPlan | None:
+    """将审听调整合并到原始编排计划——用 adjusted 的 section 覆盖 original 中同起点的 section。"""
+    if not adjusted or not adjusted.sections:
+        return original
+    if not original or not original.sections:
+        return adjusted
+
+    merged = list(original.sections)
+    for adj_sec in adjusted.sections:
+        for i, orig_sec in enumerate(merged):
+            if orig_sec.measure_start == adj_sec.measure_start:
+                merged[i] = adj_sec
+                break
+        else:
+            merged.append(adj_sec)
+
+    return ArrangementPlan(sections=merged, summary=adjusted.summary)
+
+
 def _agent_3_retry(
     state: AgentState,
     midi_notes: list[MidiNote],
@@ -567,47 +755,64 @@ def _agent_3_retry(
     melody_notes: list[MidiNote] | None = None,
     arrangement: ArrangementPlan | None = None,
 ) -> dict:
-    """校验回退路径：LLM 读 validation.errors → ModificationPlan → 执行 → 重生成。
+    """校验回退路径（ADR-001 P3）：谱面摘要 → LLM 审听 → ArrangementPlan 调整 → 重生成。
 
-    最终输出 operations JSON，经 _apply_operations() 修改输入后重新调用 generate_tab()。
+    LLM 不再读报错文本盲猜 operation，而是看结构化的谱面审听报告，
+    在编曲层面调整段落参数（register/density/bass_style），
+    然后以调整后的 ArrangementPlan 重新调用 generate_tab()。
     """
     validation_dict = state.get("validation", {})
     retry_count = state.get("validation_retry_count", 0)
+    tab_data_dict = state.get("tab_data", {})
 
-    if not validation_dict:
-        return {"error": "回退路径缺少 validation 数据", "status": "error_agent_3"}
+    if not validation_dict or not tab_data_dict:
+        return {"error": "回退路径缺少 validation 或 tab_data", "status": "error_agent_3"}
 
     validation = ValidationResult.model_validate(validation_dict)
-    error_text = "\n".join(
-        f"小节{e.measure} 弦{e.string} 品{e.fret}: {e.description}" for e in validation.errors
+    tab_data = TabData.model_validate(tab_data_dict)
+
+    # 1. 生成谱面审听报告
+    summary = _build_tab_summary(tab_data, validation, arrangement, harmony)
+    logger.info("Agent 3: 谱面审听报告 %d 字符 → LLM 审听（第 %d 次）", len(summary), retry_count)
+
+    # 2. LLM 审听
+    try:
+        llm = _get_llm("deepseek-chat", max_tokens=4096)
+        response = llm.invoke([
+            SystemMessage(content=_ARRANGEMENT_AUDITION_PROMPT),
+            HumanMessage(content=(
+                f"请审听以下谱面报告，调整有问题的段落编排参数：\n\n{summary}"
+            )),
+        ])
+    except Exception as exc:
+        logger.exception("Agent 3: LLM 审听调用失败")
+        return {"error": f"LLM 审听调用失败: {exc}", "status": "error_agent_3"}
+
+    review_text = _extract_response_text(response)
+
+    # 3. 解析调整后的 ArrangementPlan
+    adjusted = _parse_arrangement_plan(review_text)
+    if adjusted is None:
+        logger.warning("Agent 3: LLM 审听输出无法解析，保持原 ArrangementPlan 重生成")
+        adjusted = None
+
+    merged = _merge_arrangement(arrangement, adjusted)
+    if merged and adjusted:
+        logger.info("Agent 3: 审听调整了 %d 个段落 —— %s",
+                    len(adjusted.sections), adjusted.summary)
+
+    # 4. 重生成（使用调整后的 ArrangementPlan，不再走 operations 路径）
+    tab_data_new = generate_tab(
+        midi_notes, harmony, config,
+        melody_notes=melody_notes, arrangement=merged,
     )
-    warning_text = "\n".join(validation.warnings) if validation.warnings else "无"
-
-    logger.info("Agent 3: LLM 回退修正（第 %d 次），%d errors", retry_count, len(validation.errors))
-
-    llm = _get_llm()
-    response = llm.invoke([
-        SystemMessage(content=_OPERATIONS_SYSTEM_PROMPT),
-        HumanMessage(content=(
-            f"当前谱面信息：风格={config.style.value}，"
-            f"调性={harmony.key}，BPM={harmony.bpm}\n\n"
-            f"物理校验错误（需修正）：\n{error_text}\n\n"
-            f"校验警告（供参考）：\n{warning_text}\n\n"
-            "请输出修正 operations JSON："
-        )),
-    ])
-
-    plan_text = _extract_response_text(response)
-    plan = _parse_modification_plan(plan_text)
-    logger.info("Agent 3: LLM 修正方案: %s", plan.summary)
-
-    # 关键：LLM 的 operations 真正注入到生成过程
-    tab_data = generate_tab(midi_notes, harmony, config, operations=plan.operations, melody_notes=melody_notes, arrangement=arrangement)
     return {
-        "tab_data": tab_data.model_dump(),
-        "status": f"regenerated_retry_{retry_count}",
+        "tab_data": tab_data_new.model_dump(),
+        "status": f"regenerated_audit_{retry_count}",
         "caller": "agent_3",
-        "messages": [SystemMessage(content=f"回退修正方案: {plan.summary}")],
+        "messages": [SystemMessage(
+            content=f"审听调整方案: {adjusted.summary if adjusted else '保持原编排'}"
+        )],
     }
 
 
