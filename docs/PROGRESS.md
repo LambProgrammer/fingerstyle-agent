@@ -134,7 +134,6 @@
 | midi_parser 保留 GM 通道信息 | 当前 `track=0, channel=0` 硬编码，`guitar_bias` 评分维度永远拿不到真实乐器信息。改为保留 music21 提取的原始 channel/program，使 seed_rag 的吉他偏向评分实际生效。**⚠ 必须在全量入库之前完成** | ✅ |
 | chord voicing 同步优化 | `tab_generator.py` 后处理：同时间点 fretted 音符 span 检查，超标时重新分配到邻近弦降低品位跨度。解决《黄昏》剩余 20 个 both_fretted span errors | ✅ |
 | guitarpro 双 voice 分离 | TabNote 新增 `voice` 字段（melody/inner/bass），`_tabdata_to_guitarpro_song` 按声部分流至 GP Voice 0/1，加同弦去重 + gap-based duration（cap 于音符实际长度） | ✅ |
-| 产出物质量攻坚 (.gp5) | guitarpro.py GP5 writer（Beat 合并 / Chord name 溢出 / ChordAlteration 腐败）三个耦合 bug 无法在应用层彻底修复。当前状态：前端 MusicXML 正常渲染播放，.gp5 下载基本可用但不保证 GP8 完美打开 | ⬜ v2.0 |
 
 
 ## alphaTab 1.3 已知限制（非 Bug，受版本/格式所限）
