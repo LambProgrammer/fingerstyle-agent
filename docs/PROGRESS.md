@@ -6,9 +6,8 @@
 ## 当前进行中
 
 - **里程碑**：10. 工程化收尾
-- **状态**：ADR-001 P1/P2 已完成，P3 待实施；guitarpro .gp5 导出已知限制记入后续版本规划
-- **待办（M10 剩余）**：Docker 瘦身、CI/CD workflow 编写、单元测试、集成测试、README、LangSmith Trace、v1.0 正式发布（参照 `docs/release-checklist.md`）
-- **待办（ADR-001 剩余）**：P3——LLM 审听微调（重写校验回退：谱面摘要 → LLM 审听 → SectionPlan 调整 → 局部重生成）
+- **状态**：ADR-001 P1/P2/P3 全部完成；guitarpro .gp5 导出已知限制记入后续版本规划
+- **待办（M10 剩余）**：Docker 瘦身、CI/CD workflow 编写、单元测试、集成测试、README、evals 更新、评估数字采集、LangSmith Trace、v1.0 正式发布（参照 `docs/release-checklist.md`）
 - **已决策但搁置**：guitarpro.py .gp5 导出质量攻坚 → 移至后续版本规划（前端 MusicXML 渲染正常，.gp5 下载非核心链路）
 
 
@@ -35,7 +34,7 @@
   - **技术发现**：music21 10.x 多项 API 变更（`.flat`→`.flatten()`、`.notes` 属性化、`write('midi')` 不生成同时 onset 和弦）均已修正；测试脚本中的和弦失败是 music21 MIDI 写入限制，不影响真实 MIDI 文件
 - [x] **里程碑 4：Agent 节点开发**（2026-07-18）
   - `src/agents/nodes.py`：6 Agent 节点 + 入口路由，`caller` 三路分流（首次确定性 / 回退 LLM / 修改确定性执行）
-  - `src/agents/graph.py`：StateGraph 6 节点 + 条件边（`should_retry`）+ MIDI/修改双管线入口路由
+  - `src/agents/graph.py`：StateGraph 6 Agent 节点 + 入口路由 + 条件边（`should_retry`）+ MIDI/修改双管线入口路由
   - `src/api/schemas.py`：新增 `ModificationOperation`（5 种原子操作）+ `ModificationPlan`
   - `src/tools/tab_generator.py`：新增 `_resolve_scope()` / `_apply_operations()`（三轮强制执行）/ `_normalize_difficulty()`（LLM 容错）/ `_is_strong_beat()`
   - `src/agents/state.py`：新增 `bpm` / `caller` / `modification_plan` 字段
@@ -89,6 +88,12 @@
   - **技术决策变更**：层 2 删除 Agent 3 风格/模板选择一致性（风格是确定性输入参数，非 LLM 决策）
   - **已知限制**：层 3 拒识率 0%（当前 Chroma 仅 7 首，语义空间太稀疏，M10 全量 116K 入库后恢复）
 
+- [x] **ADR-001 P3：LLM 审听微调**（2026-07-28）
+  - `src/agents/nodes.py`：新增 `_build_tab_summary()`（谱面审听报告生成）+ `_ARRANGEMENT_AUDITION_PROMPT`（审听 System Prompt）+ `_merge_arrangement()`（审听调整合并）
+  - `src/agents/nodes.py`：重写 `_agent_3_retry()`——从 `validation.errors 文本 → LLM 盲猜 operations` 升级为 `谱面摘要 → LLM 审听 → ArrangementPlan 调整 → 重生成`
+  - Agent 4→3 回退路径不再依赖旧 operations 体系，LLM 在编曲层面做段落参数调整（register/density/bass_style）
+  - 三条路径统一为 ArrangementPlan 接入 generate_tab()（首次编排 / 审听调整 / 用户修改继续走 operations）
+
 
 ## 已发现并修复的 Bug
 
@@ -123,6 +128,7 @@
 | 跳跃密度 warning | `tab_validator.py` 新增 `_check_jump_density()`，统计全曲跨弦次数/总音符数，>阈值时发 Warning | ✅ |
 | 空弦泛音冲突 warning | `tab_validator.py` 扩展 `_check_open_string_abuse()`，检查低音空弦 pitch class 与和弦根音的音程差，冲突时发 Warning | ✅ |
 | Docker 镜像瘦身 | 精简构建阶段、剔除无用依赖、利用 uv 缓存层 | ⬜ |
+| evals 更新（覆盖 ADR-001 P1/P2/P3） | `test_deterministic.py` 的 `_run_pipeline` 补上 `melody_notes=` + `arrangement=`（覆盖 P1 主旋律识别 + P2 编曲决策）；`eval_llm_nodes.py` 确认 Prompt 兼容（Agent 5 保持旧 operations 路径） | ⬜ |
 | seed_rag 多进程加速 + 全量入库 + 距离阈值 | ✅ 多进程加速（4核3workers）+ 全量入库 19,701 首；✅ 距离阈值方向已验证——19K 首下 L2 距离在正确/错误查询间仍重叠（"化学合订本"8.4 < "Yesterday"11.7），当前 multilingual embedding 不适用于此方案，搁置到 v2.0（换模型/两阶段检索） | ✅ |
 | 前端渲染方案：GP5 → MusicXML | guitarpro.py 的 GP5 writer 将多 beat 合并为单 beat → alphaTab 无法渲染品位数字 → 前端改为 MusicXML 手写 XML（alphaTab 原生支持），下载仍保留 .gp5 | ✅ |
 | midi_parser 保留 GM 通道信息 | 当前 `track=0, channel=0` 硬编码，`guitar_bias` 评分维度永远拿不到真实乐器信息。改为保留 music21 提取的原始 channel/program，使 seed_rag 的吉他偏向评分实际生效。**⚠ 必须在全量入库之前完成** | ✅ |

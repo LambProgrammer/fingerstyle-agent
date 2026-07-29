@@ -1,7 +1,7 @@
 # 指弹吉他谱生成多 Agent 系统 —— 项目章程
 
-> 版本：1.8（架构升级——ADR-001：编排引擎从确定性规则 → LLM 辅助编曲，详见 §4 后 ADR）
-> 更新日期：2026-07-26
+> 版本：1.9（ADR-001 P1/P2/P3 全部实施完成，M10 工程收尾中）
+> 更新日期：2026-07-28
 
 ---
 
@@ -74,9 +74,10 @@
 |-----------|------------------|------|------|
 | **Agent 1（旋律解析）** | `src/tools/midi_parser.parse_midi()` | MIDI 文件路径或字节流 | 音符序列（`List[Note]`） |
 | **Agent 2（和声编排）** | `src/tools/music21_wrapper.analyze_chords()` | 音符序列 | 和弦进行（`List[Chord]`）+ 调性 + BPM |
-| **Agent 3（指法生成）** | `src/tools/tab_generator.generate_tab()`（内部调用模板库 `apply_template()` + music21 辅助查询） | 音符序列 + 和弦进行 + 用户配置（难度/风格） | TAB 坐标数据（`List[TabNote]`） |
-| **Agent 4（物理校验）** | `src/tools/tab_validator.validate()` | TAB 坐标数据 | 校验结果（通过 / 不通过 + 错误信息） |
-| **Agent 5（修改理解器）** | 解析用户指令后，调用 `src/tools/tab_generator.generate_tab()` 重新生成局部 | 自然语言指令 + 当前 TAB 数据 + 修改目标定位 | 修改后的 TAB 数据 |
+| **Agent 2.5（LLM 编曲决策）** | `_build_song_summary()` + LLM（deepseek-chat V3）→ `ArrangementPlan` | 和声分析 + 旋律轨音符 | 段落编排计划（density / bass_style / register / techniques / dynamic） |
+| **Agent 3（指法生成）** | `src/tools/tab_generator.generate_tab()`（三路分支：首次确定性 / 审听回退 / 修改执行） | 音符序列 + 和弦进行 + ArrangementPlan + melody_notes（可选） | TAB 坐标数据（`List[TabNote]`） |
+| **Agent 4（物理校验）** | `src/tools/tab_validator.validate()` + 条件回退判定 | TAB 坐标数据 | 校验结果（通过/不通过 + errors + warnings + capo 推荐） |
+| **Agent 5（修改理解器）** | LLM 解析用户指令 → `ModificationPlan`（operations 列表）。Agent 3（caller=agent_5）执行重生成 | 自然语言指令 + 当前 TAB 上下文 | 结构化修改计划（`ModificationPlan`），由 Agent 3 确定性执行 |
 
 ### 4.2 确定性工具 → 第三方库映射
 
@@ -124,7 +125,7 @@
 
 ## 架构决策记录（ADR-001）：编排引擎升级 —— 确定性规则 → LLM 辅助编曲
 
-> **日期**：2026-07-26 | **状态**：P1/P2 已实施，P3 待实施 | **影响范围**：Agent 2.5（新）+ Agent 3 + tab_generator.py + midi_parser.py
+> **日期**：2026-07-26 | **状态**：P1/P2/P3 全部已实施 | **影响范围**：Agent 2.5（新）+ Agent 3 + tab_generator.py + midi_parser.py
 
 ### 背景
 
@@ -187,8 +188,8 @@ v1.x 的指法生成引擎（`tab_generator.py`）采用纯确定性规则：旋
 | **6. FastAPI 接口开发** | 1-2天 | 三个接口：`/upload`（含输入路由硬逻辑 + .gp5 GBK→UTF-8 重编码）、`/modify`、`/download`（UTF-8 编码写出 + 时值精度优化 + 滑音方向修复）。TabData→guitarpro Song 转换器 | `src/api/routes.py` |
 | **7. 前端开发与 alphaTab 集成** | 1-2天 | 静态 HTML（牛皮纸主题）：拖拽上传 + 歌名搜索 + 风格/定弦下拉配置 + 生成/修改/下载按钮 + QA 输入 + 自定义播放控制栏 + alphaTab 六线谱渲染播放（staveProfile:"tab" + 本地 TimGM6mb.sf2 5.7MB + 备用 sonivox.sf2 1.3MB）+ .gp5 GBK→UTF-8 自动重编码 + 时值精度优化（三连音/32分） + 滑音方向修复 | `src/frontend/`（index.html + app.js + style.css + *.sf2）、`src/api/routes.py`（下载/上传编码修复） |
 | **8. 记忆系统集成** | 1-2天 | Checkpointer（PostgreSQL）接入 LangGraph；Store（Redis）接入 LangGraph；在 `graph.py` 编译时注入 | `src/memory/checkpointer.py`, `src/memory/preferences.py`, `src/agents/graph.py` |
-| **9. 评估体系（Evals）** | 1-2天 | 三层评估：① 确定性指标（黄金 MIDI 测试集 → 物理校验通过率 / 旋律保真率 / 难度约束符合率，pytest 形式）；② LLM 决策层评估（LangSmith Datasets + `evaluate()`：Agent 5 指令解析准确率、Agent 3 决策一致性）；③ RAG 检索评估（查询集 → hit@1 / hit@3 / 优先级排序正确率） | `evals/`（数据集 + 三层评估代码） |
-| **10. 工程化收尾** | 2-3天 | 编写正式测试：单元测试（`tests/unit/`，mock 外部依赖）+ 集成测试（`tests/integration/`，连接真实服务，不进 CI）；GitHub Actions CI（日常 push 触发：并行运行 Ruff + `tests/unit/` + `evals/`，不起外部服务，不构建镜像、不发布 data.tar.gz）；Docker 镜像瘦身（精简构建阶段、剔除无用依赖、利用 uv 缓存层等）；README 撰写；**评估数字采集**——发布前跑三轮评估记录终值：① `uv run pytest evals/test_deterministic.py -v` → 物理校验通过率 / 旋律保真率 / zone 合规率；② `uv run python evals/eval_llm_nodes.py` → Agent 5 指令解析准确率；③ `uv run python evals/eval_rag.py` → hit@1 / 拒识率。数字作为简历性能数据的唯一来源（架构改进不报百分比差值，以设计决策 + Trace 定性展示）；**LangSmith 最终 Trace 收集**——跑一次完整管线，捕获 6 Agent 决策链路可视化 | `tests/unit/`, `tests/integration/`, `.github/workflows/ci.yml`, `README.md`, `evals/` |
+| **9. 评估体系（Evals）** | 1-2天 | 三层评估：① 确定性指标（黄金 MIDI 测试集 → 物理校验通过率 / 旋律保真率 / 声部 zone 合规率，pytest 形式）；② LLM 决策层评估（Agent 5 指令解析准确率：op 类型 + scope 类别）；③ RAG 检索评估（查询集 → hit@1 / 正确拒识率） | `evals/`（数据集 + 三层评估代码） |
+| **10. 工程化收尾** | 2-3天 | 编写正式测试：单元测试（`tests/unit/`，mock 外部依赖）+ 集成测试（`tests/integration/`，连接真实服务，不进 CI）；GitHub Actions CI（日常 push 触发：并行运行 Ruff + `tests/unit/` + `evals/`，不起外部服务，不构建镜像、不发布 data.tar.gz）；Docker 镜像瘦身；README 撰写；**evals 更新**——`test_deterministic.py` 的 `_run_pipeline` 补上 `melody_notes=` 和 `arrangement=`（覆盖 P1 旋律轨识别 + P2 编曲决策）；`eval_llm_nodes.py` 确认 Prompt 兼容（Agent 5 保持旧 operations 路径）；**评估数字采集**——发布前跑三轮评估记录终值：① `uv run pytest evals/test_deterministic.py -v` → 物理校验通过率 / 旋律保真率 / zone 合规率；② `uv run python evals/eval_llm_nodes.py` → Agent 5 指令解析准确率；③ `uv run python evals/eval_rag.py` → hit@1 / 拒识率。数字作为简历性能数据的唯一来源（架构改进不报百分比差值，以设计决策 + Trace 定性展示）；**LangSmith 最终 Trace 收集**——跑一次完整管线，捕获 6 Agent 决策链路可视化 | `tests/unit/`, `tests/integration/`, `.github/workflows/ci.yml`, `README.md`, `evals/` |
 | **v1.0 正式发布** | 0.5天 | 代码冻结后执行：① 参照 `docs/release-checklist.md` 检查交付模式配置（docker-compose.yml 去开发挂载、Dockerfile 确认模型内置）；② 手动打包 `data.tar.gz`；③ 手动打 tag 如 `v1.0` → GitHub Actions CD 在云端构建镜像并推送至 Docker Hub；④ 在 GitHub Release 页面手动上传 `data.tar.gz` + `docker-compose.yml`（交付版）+ `.env.example` 作为附件；⑤ 撰写 Release Notes。发布后删除 `docs/release-checklist.md`（一次性检查清单，发布后即失效） | `.github/workflows/cd.yml`, `docs/release-checklist.md` |
 
 ### 开发过程中的验证约定（全里程碑通用）
@@ -294,11 +295,10 @@ evals/
   - 难度约束符合率：初级 → 低把位品位范围、跨度限制等
 - 以 pytest 形式实现于 `evals/test_deterministic.py`，里程碑 10 接入 CI（pytest 可从任意指定目录收集测试，目录不必叫 `tests/`）
 
-### 层 2：LLM 决策层评估（LangSmith Datasets + `evaluate()`，手动触发）
+### 层 2：LLM 决策层评估（手动触发，涉及 LLM 调用成本）
 
-- Agent 5 指令解析准确率：20-30 条自然语言指令 → 期望的结构化修改目标（小节范围、操作类型）
-- Agent 3 风格 / 模板选择一致性
-- 数据集：`evals/datasets/instructions.jsonl`（本地源文件，由脚本上传至 LangSmith Datasets）；脚本：`evals/eval_llm_nodes.py`。涉及 LLM 调用成本，不进 CI，由我决定触发时机
+- Agent 5 指令解析准确率：25 条自然语言指令 → op 类型匹配率 + scope 类别匹配率
+- 数据集：`evals/datasets/instructions.jsonl`；脚本：`evals/eval_llm_nodes.py`。不进 CI，由我决定触发时机
 
 ### 层 3：RAG 检索评估（脚本化，手动触发）
 
@@ -347,7 +347,7 @@ evals/
 - [ ] 输入歌名，RAG 曲谱库未命中 → 提示"未找到该曲目，请上传 MIDI 文件"
 - [ ] 命中后可通过 QA 修改模式调用 LLM 决策优化谱面质量
 - [ ] 上传 TAB 谱（.gp5），直接跳转 alphaTab 渲染，不走 Agent 链路
-- [ ] 配置面板切换难度，生成的指法对应变化（初级→低把位、高级→高把位）
+- [ ] 配置面板切换风格/定弦，生成的指法对应变化（如日系→开放弦drone、美式→交替低音）
 - [ ] 配置面板切换风格，生成的指法风格对应变化
 - [ ] QA 输入框输入"副歌简化一点"，系统定位副歌小节并重新生成，其他部分不变
 - [ ] 谱面显示技巧标注（H / P / B / A.H. 等）
@@ -355,10 +355,10 @@ evals/
 
 **记忆系统验收**：
 - [ ] 用户刷新页面后，会话状态恢复（短期记忆）
-- [ ] 用户关闭页面重开，偏好设置（难度/风格）自动加载（长期记忆）
+- [ ] 用户关闭页面重开，可通过偏好开关主动加载之前保存的风格/定弦偏好（长期记忆）
 
 **评估体系验收**：
-- [ ] 确定性指标评估在黄金测试集上运行，产出物理校验通过率 / 旋律保真率 / 难度约束符合率
+- [ ] 确定性指标评估在黄金测试集上运行，产出物理校验通过率 / 旋律保真率 / 声部 zone 合规率
 - [ ] LangSmith 上可见 Agent 5 指令解析评估的 Experiment 结果
 - [ ] RAG 检索评估脚本产出 hit@1 / 正确拒识率报告
 
