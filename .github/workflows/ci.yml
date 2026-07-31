@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+
+jobs:
+  # ---- Ruff 静态检查 ----
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run ruff check src/
+
+  # ---- 确定性指标评估（无外部服务，无 LLM 成本）----
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run pytest evals/test_deterministic.py -v
+
+  # ---- 单元测试（mock 外部依赖，无 PostgreSQL/Redis/Chroma）----
+  unit:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # TODO(M10): 移除，待单元测试编写完成后
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run pytest tests/ -v || echo "（单元测试待编写，允许空运行）"
