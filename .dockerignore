@@ -23,3 +23,6 @@ evals/
 
 # Scripts（一次性数据准备工具，运行时不需要）
 scripts/
+
+# Debug artifacts
+Bug_fixing/
