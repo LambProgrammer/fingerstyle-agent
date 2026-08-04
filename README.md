@@ -2,7 +2,7 @@
 
 > MIDI 上传 → 6 Agent 协作 → 六线谱渲染 + 播放 + 下载
 
-[![CI](https://github.com/[your-username]/fingerstyle-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/[your-username]/fingerstyle-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/LambProgrammer/fingerstyle-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/LambProgrammer/fingerstyle-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -28,7 +28,7 @@
 
 ```bash
 # 1. 拉取镜像
-docker pull [your-dockerhub]/fingerstyle-agent:v1.0
+docker pull lambprogrammer/fingerstyle-agent:v1.0
 
 # 2. 下载数据包并解压到项目目录
 #    GitHub Releases → data.tar.gz → 解压到 ./data/
