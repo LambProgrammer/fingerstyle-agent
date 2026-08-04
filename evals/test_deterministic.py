@@ -54,13 +54,13 @@ def _tab_notes_at_time(tab_notes: list, t: float, window: float = 0.1) -> list:
 
 
 def _run_pipeline(midi_path: str) -> tuple[TabData, list[MidiNote], list]:
-    """跑完整 Agent 1→2→3 管线，返回 (tab_data, midi_notes, all_tab_notes)。"""
-    midi_notes, bpm = parse_midi(midi_path)
-    harmony = analyze_chords(midi_notes, bpm)
+    """跑完整 Agent 1→2→3 管线（覆盖 ADR-001 P1/P2），返回 (tab_data, midi_notes, all_tab_notes)。"""
+    all_notes, melody_notes, bpm = parse_midi(midi_path)
+    harmony = analyze_chords(all_notes, bpm)
     config = TabGenerationConfig(style=Style.JPOP)
-    tab_data = generate_tab(midi_notes, harmony, config)
+    tab_data = generate_tab(all_notes, harmony, config, melody_notes=melody_notes)
     all_tab_notes = [n for m in tab_data.measures for n in m.notes]
-    return tab_data, midi_notes, all_tab_notes
+    return tab_data, all_notes, all_tab_notes
 
 
 @pytest.mark.parametrize("fixture_name,expected_errors_max", [
@@ -116,14 +116,13 @@ def test_melody_fidelity(all_golden_midi_paths):
     matched = 0
 
     for path in all_golden_midi_paths:
-        midi_notes, _ = parse_midi(path)
-        bpm = 100  # 从 MIDI 解析的实际 BPM（fixture 已知）
-        # 取实际 BPM
-        _, actual_bpm = parse_midi(path)
-        harmony = analyze_chords(midi_notes, actual_bpm or bpm)
+        all_notes, melody_notes, actual_bpm = parse_midi(path)
+        bpm = actual_bpm or 100
+        harmony = analyze_chords(all_notes, bpm)
         config = TabGenerationConfig(style=Style.JPOP)
-        tab_data = generate_tab(midi_notes, harmony, config)
+        tab_data = generate_tab(all_notes, harmony, config, melody_notes=melody_notes)
         all_tab = [n for m in tab_data.measures for n in m.notes]
+        midi_notes = all_notes  # 兼容后续变量名引用
 
         # 只统计可能被生成器用的音符（排除极短/极低 MIDI 音符）
         melody_candidates = [n for n in midi_notes if n.midi_number >= 55]

@@ -4,9 +4,13 @@
 可直接提交到 Git 仓库。无需动态生成。
 """
 
+import sys
 from pathlib import Path
 
 import pytest
+
+# 项目根目录加入 sys.path，使 evals/ 下能 import src.*
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 _GOLDEN_DIR = Path(__file__).parent / "datasets" / "golden_midi"
 
