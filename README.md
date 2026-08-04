@@ -2,7 +2,7 @@
 
 > MIDI 上传 → 6 Agent 协作 → 六线谱渲染 + 播放 + 下载
 
-[![CI](https://github.com/LambProgrammer/fingerstyle-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/LambProgrammer/fingerstyle-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/LambProgrammer/fingerstyle-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/LambProgrammer/fingerstyle-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
