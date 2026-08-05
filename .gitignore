@@ -17,3 +17,4 @@ wheels/
 
 # Runtime persistent data (Chroma / postgres dumps / raw MIDI datasets)
 data/
+data.tar.gz
