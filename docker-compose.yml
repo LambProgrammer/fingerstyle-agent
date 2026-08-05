@@ -1,9 +1,7 @@
 services:
   # ---- API 服务 ----
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: lambprogrammer/fingerstyle-agent:v1.0
     container_name: fingerstyle-api
     ports:
       - "8000:8000"
@@ -25,8 +23,6 @@ services:
     env_file:
       - .env
     volumes:
-      # 只挂 src/ 子目录，避免覆盖容器内 /app/.venv
-      - ./src:/app/src:ro
       # RAG 搜索命中后需要读取 data/ 下的 MIDI 源文件
       - ./data:/app/data:ro
     depends_on:
