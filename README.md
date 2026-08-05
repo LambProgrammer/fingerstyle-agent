@@ -33,14 +33,17 @@ docker pull lambprogrammer/fingerstyle-agent:v1.0
 # 2. 下载数据包并解压到项目目录
 #    GitHub Releases → data.tar.gz → 解压到 ./data/
 
-# 3. 配置环境变量
+# 3. 下载交付版 compose 文件
+#    GitHub Releases → 下载 docker-compose.yml 放到项目目录
+
+# 4. 配置环境变量
 cp .env.example .env
 # 编辑 .env，填写 DEEPSEEK_API_KEY（必填，否则 Agent 决策节点不工作）
 
-# 4. 启动
+# 5. 启动
 docker compose up -d
 
-# 5. 打开浏览器
+# 6. 打开浏览器
 #    http://localhost:8000       — 上传 MIDI、生成指弹谱
 #    http://localhost:8000/docs  — Swagger API 文档
 ```
