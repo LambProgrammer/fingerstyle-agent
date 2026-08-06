@@ -127,8 +127,8 @@
 | 拍号感知 scope 解析 | `_apply_operations()` Round1 的 `int(n.start_time / 4.0)` 硬编码了 4/4 拍。改为读取 `harmony.time_signature` 来计算小节边界，确保 3/4、6/8 拍 MIDI 的 scope 解析不偏移 | ✅ |
 | 跳跃密度 warning | `tab_validator.py` 新增 `_check_jump_density()`，统计全曲跨弦次数/总音符数，>阈值时发 Warning | ✅ |
 | 空弦泛音冲突 warning | `tab_validator.py` 扩展 `_check_open_string_abuse()`，检查低音空弦 pitch class 与和弦根音的音程差，冲突时发 Warning | ✅ |
-| Docker 镜像瘦身 | 精简构建阶段、剔除无用依赖、利用 uv 缓存层 | ⬜ |
-| evals 更新（覆盖 ADR-001 P1/P2/P3） | `test_deterministic.py` 的 `_run_pipeline` 补上 `melody_notes=` + `arrangement=`（覆盖 P1 主旋律识别 + P2 编曲决策）；`eval_llm_nodes.py` 确认 Prompt 兼容（Agent 5 保持旧 operations 路径） | ⬜ |
+| Docker 镜像瘦身 | 精简构建阶段、剔除无用依赖、利用 uv 缓存层 | ✅ |
+| evals 更新（覆盖 ADR-001 P1/P2/P3） | `test_deterministic.py` 的 `_run_pipeline` 补上 `melody_notes=` + `arrangement=`（覆盖 P1 主旋律识别 + P2 编曲决策）；`eval_llm_nodes.py` 确认 Prompt 兼容（Agent 5 保持旧 operations 路径） | ✅ |
 | seed_rag 多进程加速 + 全量入库 + 距离阈值 | ✅ 多进程加速（4核3workers）+ 全量入库 19,701 首；✅ 距离阈值方向已验证——19K 首下 L2 距离在正确/错误查询间仍重叠（"化学合订本"8.4 < "Yesterday"11.7），当前 multilingual embedding 不适用于此方案，搁置到 v2.0（换模型/两阶段检索） | ✅ |
 | 前端渲染方案：GP5 → MusicXML | guitarpro.py 的 GP5 writer 将多 beat 合并为单 beat → alphaTab 无法渲染品位数字 → 前端改为 MusicXML 手写 XML（alphaTab 原生支持），下载仍保留 .gp5 | ✅ |
 | midi_parser 保留 GM 通道信息 | 当前 `track=0, channel=0` 硬编码，`guitar_bias` 评分维度永远拿不到真实乐器信息。改为保留 music21 提取的原始 channel/program，使 seed_rag 的吉他偏向评分实际生效。**⚠ 必须在全量入库之前完成** | ✅ |
