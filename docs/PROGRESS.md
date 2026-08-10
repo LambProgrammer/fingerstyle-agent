@@ -4,12 +4,12 @@
 
 ## 当前状态
 
-- **里程碑**：M1-M10 全部完成；v1.0 已发布，v1.0.1 待发布
+- **里程碑**：M1-M10 全部完成；v1.0.1 已发布（GitHub Release + Docker Hub）
 - **ADR-001**：P1/P2/P3 全部完成
 - **v1.0.1 待发布**：含 Dockerfile 模型修复 + modify route thread_id + scope 别名 + RAG top-3 keyword match + zone 合规率 voice 测量 + alphaTab 连续渲染修复
 - **搁置**：guitarpro.py .gp5 导出质量攻坚 → 后续版本规划
 
-## 评估数字终值（v1.0 发布后采集）
+## 评估数字终值（v1.0.1 发布前采集）
 
 | 指标 | 数值 | 说明 |
 |------|:---:|------|

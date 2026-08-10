@@ -120,6 +120,5 @@ MIDI 上传 → Agent 1 旋律解析 → Agent 2 和声编排 → Agent 2.5 LLM 
 ## 项目文档
 
 - [项目章程](docs/project-charter.md) — 技术栈 / 架构映射 / ADR / 里程碑
-- [进度记录](docs/PROGRESS.md) — 已完成 / 进行中 / Bug 清单 / 技术决策
+- [进度记录](docs/PROGRESS.md) — 已完成 / 技术决策 / Bug 清单 / 评估数字
 - [评估体系](evals/) — 三层 evals（确定性 / LLM 决策 / RAG 检索）
-- [发布检查清单](docs/release-checklist.md) — v1.0 交付前自查
