@@ -144,7 +144,7 @@ def test_melody_fidelity(all_golden_midi_paths):
 
 
 def test_zone_compliance(all_golden_midi_paths):
-    """③ 声部 zone 合规率：旋律→1-3弦、低音→4-6弦、内声部→3-4弦。"""
+    """③ 声部 zone 合规率——P2 升级：使用 TabNote.voice 字段精确判定。"""
     total_notes = 0
     violations = 0
 
@@ -153,23 +153,18 @@ def test_zone_compliance(all_golden_midi_paths):
 
         for tn in all_tab_notes:
             total_notes += 1
-            # 推定声部：按弦号判断
-            # 1-2 弦只能是旋律（合法）或内声部/低音（违规）
-            # 4-6 弦只能是低音（合法）或旋律（违规）
-            # 3 弦只能是旋律回落或内声部
 
-            # 极简判断：3弦是合法的过渡区，不判违规
-            # 旋律不应出现在 4-6 弦
-            # 低音不应出现在 1-2 弦
-
-            # 我们无法 100% 确定每个 TabNote 属于哪个声部（generator 不输出声部标记），
-            # 故采用软判断：高品位(>5)出现在低音弦上的音大概率是旋律误入低音区
-            if tn.string >= 4 and tn.fret > 9:
-                # 4-6 弦高品位：可能是旋律误入低音区（真正的低音很少用到品 10+）
+            if tn.voice == "melody" and tn.string not in {1, 2, 3}:
+                # 旋律误入 4-6 弦
+                violations += 1
+            elif tn.voice == "bass" and tn.string not in {4, 5, 6}:
+                # 低音误入 1-3 弦
+                violations += 1
+            elif tn.voice == "inner" and tn.string not in {3, 4}:
+                # 内声部越界
                 violations += 1
 
     zone_rate = (1 - violations / total_notes) * 100 if total_notes > 0 else 100
     print(f"\n  zone 合规率: {total_notes - violations}/{total_notes} = {zone_rate:.1f}%")
 
-    # 断言：zone 合规率应 ≥ 85%（chord voicing 可能为可弹性做跨弦优化）
-    assert zone_rate >= 85, f"zone 合规率 {zone_rate:.1f}% 低于门槛 85%"
+    assert zone_rate >= 90, f"zone 合规率 {zone_rate:.1f}% 低于门槛 90%"

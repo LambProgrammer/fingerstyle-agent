@@ -271,6 +271,9 @@
         if (resp.ok) {
             const text = await resp.text();
             console.log("[加载] MusicXML %d chars → alphaTabApi.load()", text.length);
+            // alphaTab 1.3 连续 load 需先销毁旧渲染器再重建
+            alphaTabApi.destroy();
+            initAlphaTab();
             // alphaTab 1.3 的 load(string) 会把字符串当 URL 去 fetch，
             // 必须转为 Uint8Array 才能正确识别 MusicXML 内容
             alphaTabApi.load(new TextEncoder().encode(text));

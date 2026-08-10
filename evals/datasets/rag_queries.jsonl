@@ -1,30 +1,30 @@
-{"query": "黄昏", "should_hit": true}
-{"query": "无题", "should_hit": true}
-{"query": "押尾", "should_hit": true}
-{"query": "陈亮", "should_hit": true}
-{"query": "黄昏 押尾", "should_hit": true}
+{"query": "Umbrella", "should_hit": true}
+{"query": "Umbrella Rihanna", "should_hit": true}
+{"query": "Yesterday", "should_hit": true}
+{"query": "Let It Be", "should_hit": true}
+{"query": "Imagine", "should_hit": true}
+{"query": "Billie Jean", "should_hit": true}
+{"query": "Bohemian Rhapsody", "should_hit": true}
+{"query": "Hotel California", "should_hit": true}
+{"query": "Shape of You", "should_hit": true}
+{"query": "Rolling in the Deep", "should_hit": true}
+{"query": "Hey Jude", "should_hit": true}
+{"query": "Wonderwall", "should_hit": true}
+{"query": "Hallelujah", "should_hit": true}
 {"query": "twilight", "should_hit": true}
-{"query": "黃昏", "should_hit": true}
-{"query": "コータロー", "should_hit": true}
-{"query": "押尾コータロー", "should_hit": true}
-{"query": "Kotaro Oshio", "should_hit": true}
-{"query": "陈亮 无题", "should_hit": true}
-{"query": "twilight 黄昏", "should_hit": true}
-{"query": "jpop 黄昏", "should_hit": true}
-{"query": "Beatles", "should_hit": false}
-{"query": "Yesterday", "should_hit": false}
+{"query": "Beatles", "should_hit": true}
 {"query": "莫扎特", "should_hit": false}
 {"query": "天空之城", "should_hit": false}
-{"query": "Lemon", "should_hit": false}
-{"query": "fingerstyle guitar", "should_hit": false}
-{"query": "指弹", "should_hit": false}
-{"query": "吉他谱", "should_hit": false}
-{"query": "月光", "should_hit": false}
-{"query": "卡农", "should_hit": false}
-{"query": "bach", "should_hit": false}
 {"query": "月亮代表我的心", "should_hit": false}
-{"query": "うた", "should_hit": false}
+{"query": "卡农", "should_hit": false}
+{"query": "太阳系外行星观测指南", "should_hit": false}
+{"query": "asdfghjkl123456", "should_hit": false}
+{"query": "こんにちは世界", "should_hit": false}
+{"query": "黄昏", "should_hit": false}
+{"query": "押尾コータロー", "should_hit": false}
+{"query": "无题", "should_hit": false}
+{"query": "吉他谱", "should_hit": false}
+{"query": "指弹", "should_hit": false}
+{"query": "Lemon", "should_hit": false}
 {"query": "sunset", "should_hit": false}
-{"query": "tobu", "should_hit": false}
-{"query": "押尾さん", "should_hit": true}
 {"query": "fingerstyle", "should_hit": false}
