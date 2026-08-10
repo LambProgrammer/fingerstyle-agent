@@ -15,7 +15,7 @@ RUN uv sync --frozen --no-dev
 RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
 
 # 2.6 清理缓存 + 字节码（减小镜像体积）
-RUN rm -rf /root/.cache/uv /root/.cache/pip /root/.cache/huggingface \
+RUN rm -rf /root/.cache/uv /root/.cache/pip \
     && find /app/.venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
     find /app/.venv -type f -name '*.pyc' -delete 2>/dev/null; \
     true
