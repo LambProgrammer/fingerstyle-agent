@@ -825,11 +825,11 @@ def _resolve_scope(scope: str, num_measures: int) -> list[int]:
         third = max(1, num_measures // 3)
         return list(range(num_measures - third, num_measures))
 
-    if s in ("bridge", "间奏"):
+    if s in ("bridge", "间奏", "interlude"):
         third = max(1, num_measures // 3)
         return list(range(third, num_measures - third))
 
-    if s in ("verse", "主歌"):
+    if s in ("verse", "主歌", "intro", "outro", "前奏", "尾奏"):
         third = max(1, num_measures // 3)
         return list(range(third))
 

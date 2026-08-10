@@ -92,7 +92,9 @@ _OPERATIONS_SYSTEM_PROMPT = (
     '    "transpose"         — 音高上下移\n'
     '    "reassign_string"   — 改变弦分配偏好\n'
     '    "switch_technique"  — 替换演奏技巧\n'
-    "  scope: 作用范围，自由填写自然语言（如 'chorus' / 'measure_5-8' / 'entire_song'）\n"
+    "  scope: 作用范围，必须使用以下值之一：\n"
+    "    'verse' | 'chorus' | 'bridge' | 'entire_song' | 'intro' | 'outro'\n"
+    "    或 'measure_N'（如 'measure_5'）/ 'measure_N-M'（如 'measure_5-8'）\n"
     "  以及对应 op 的参数字段。\n\n"
     "参数合法值（必须严格使用以下值，严禁自己造词）：\n"
     '  difficulty: "beginner" | "intermediate" | "advanced"\n'

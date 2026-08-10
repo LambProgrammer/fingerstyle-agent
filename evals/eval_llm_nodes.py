@@ -33,9 +33,9 @@ def _classify_scope(scope: str) -> str:
         return "entire_song"
     if s in ("chorus", "副歌"):
         return "chorus"
-    if s in ("bridge", "间奏"):
+    if s in ("bridge", "间奏", "interlude"):
         return "bridge"
-    if s in ("verse", "主歌"):
+    if s in ("verse", "主歌", "intro", "outro", "前奏", "尾奏"):
         return "verse"
     if "measure" in s or "小节" in s or "第" in s:
         return "measure_range"
