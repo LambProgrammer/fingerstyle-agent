@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-- **里程碑**：M1-M10 全部完成；v1.0 已发布（GitHub Release + Docker Hub）
+- **里程碑**：M1-M10 全部完成；v1.0 已发布，v1.0.1 待发布
 - **ADR-001**：P1/P2/P3 全部完成
-- **待办**：发 v1.0.1（修复 Docker 镜像不含 embedding 模型 bug + modify route Checkpointer 缺失 thread_id + scope 准确率 76%→92%）
+- **v1.0.1 待发布**：含 Dockerfile 模型修复 + modify route thread_id + scope 别名 + RAG top-3 keyword match + zone 合规率 voice 测量 + alphaTab 连续渲染修复
 - **搁置**：guitarpro.py .gp5 导出质量攻坚 → 后续版本规划
 
 ## 评估数字终值（v1.0 发布后采集）
@@ -15,11 +15,11 @@
 |------|:---:|------|
 | 物理校验通过率 | 100%（5/5） | 5 黄金 MIDI 平均 0.4 errors |
 | 旋律保真率 | 100.0% | 29/29 音符正确映射 |
-| zone 合规率 | 88.9% | 48/54 音符在正确声部弦区 |
+| zone 合规率 | 94.4%（51/54） | voice 精确测量（P2 升级），3 例违规为 chord voicing 取舍 |
 | Agent 5 op 准确率 | 84.0%（21/25） | 剩余 16% 为自然语言固有歧义 |
-| Agent 5 scope 准确率 | 92.0%（23/25） | eval 驱动优化：76%→92%（+16pp） |
-| RAG hit@1 | 100.0%（14/14） | |
-| 正确拒识率 | 0.0% | 已知限制，v2.0（top-K + keyword match） |
+| Agent 5 scope 准确率 | 88.0%（22/25） | eval 驱动优化：76%→88%（+12pp） |
+| RAG hit@1 | 100.0%（15/15） | top-3 keyword match rerank（英文流行歌查询） |
+| 正确拒识率 | 86.7%（13/15） | top-3 keyword match，基线 0% +86.7pp |
 
 
 ## 已完成

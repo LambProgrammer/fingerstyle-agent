@@ -28,7 +28,7 @@
 
 ```bash
 # 1. 拉取镜像
-docker pull lambprogrammer/fingerstyle-agent:v1.0
+docker pull lambprogrammer/fingerstyle-agent:v1.0.1
 
 # 2. 下载数据包并解压到项目目录
 #    GitHub Releases → data.tar.gz → 解压到 ./data/
@@ -89,16 +89,17 @@ MIDI 上传 → Agent 1 旋律解析 → Agent 2 和声编排 → Agent 2.5 LLM 
 
 ## 评估指标
 
-> 全部指标在 v1.0 发布后采集，详见 [evals/](evals/)。
+> v1.0.1 发布前采集终值，详见 [evals/](evals/)。
 
 | 指标 | 数值 |
 |------|:---:|
 | 物理校验通过率 | 100%（5/5 黄金 MIDI） |
 | 旋律保真率 | 100.0%（29/29 音符） |
-| 声部 zone 合规率 | 88.9%（48/54 音符） |
-| Agent 5 op 准确率 | 84.0%（21/25） |
-| Agent 5 scope 准确率 | 92.0%（23/25，eval 驱动优化 +16pp） |
-| RAG hit@1 | 100.0%（14/14，正确拒识率 v2.0） |
+| 声部 zone 合规率 | 94.4%（51/54，voice 精确测量） |
+| Agent 5 op 准确率 | 84.0%（21/25，剩余16%为自然语言歧义） |
+| Agent 5 scope 准确率 | 88.0%（22/25，基线 76% +12pp） |
+| RAG hit@1 | 100.0%（15/15） |
+| 正确拒识率 | 86.7%（13/15，基线 0% +86.7pp，top-3 keyword match） |
 
 ---
 
