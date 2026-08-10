@@ -1,14 +1,25 @@
 # 项目进度记录
 
-> 最后更新：2026-07-28
+> 最后更新：2026-08-10
 
+## 当前状态
 
-## 当前进行中
+- **里程碑**：M1-M10 全部完成；v1.0 已发布（GitHub Release + Docker Hub）
+- **ADR-001**：P1/P2/P3 全部完成
+- **待办**：发 v1.0.1（修复 Docker 镜像不含 embedding 模型 bug + modify route Checkpointer 缺失 thread_id + scope 准确率 76%→92%）
+- **搁置**：guitarpro.py .gp5 导出质量攻坚 → 后续版本规划
 
-- **里程碑**：10. 工程化收尾
-- **状态**：ADR-001 P1/P2/P3 全部完成；guitarpro .gp5 导出已知限制记入后续版本规划
-- **待办（M10 剩余）**：Docker 瘦身、CI/CD workflow 编写、单元测试、集成测试、README、evals 更新、评估数字采集、LangSmith Trace、v1.0 正式发布（参照 `docs/release-checklist.md`）
-- **已决策但搁置**：guitarpro.py .gp5 导出质量攻坚 → 移至后续版本规划（前端 MusicXML 渲染正常，.gp5 下载非核心链路）
+## 评估数字终值（v1.0 发布后采集）
+
+| 指标 | 数值 | 说明 |
+|------|:---:|------|
+| 物理校验通过率 | 100%（5/5） | 5 黄金 MIDI 平均 0.4 errors |
+| 旋律保真率 | 100.0% | 29/29 音符正确映射 |
+| zone 合规率 | 88.9% | 48/54 音符在正确声部弦区 |
+| Agent 5 op 准确率 | 84.0%（21/25） | 剩余 16% 为自然语言固有歧义 |
+| Agent 5 scope 准确率 | 92.0%（23/25） | eval 驱动优化：76%→92%（+16pp） |
+| RAG hit@1 | 100.0%（14/14） | |
+| 正确拒识率 | 0.0% | 已知限制，v2.0（top-K + keyword match） |
 
 
 ## 已完成
@@ -117,6 +128,8 @@
 - **M10**：guitarpro.py 的 GP5 writer 将多 beat 合并为单 beat → alphaTab 无法正确解析生成的 .gp5（渲染无品位数字），但 Guitar Pro 8 能容错打开 → **前端渲染改为 MusicXML 方案**（`_tabdata_to_musicxml()` 手写 MusicXML，alphaTab 原生支持）; .gp5 下载仍保留 guitarpro.py（GP8/TuxGuitar 能正常打开）
 - **M10**：`_build_gp_strings` 弦列表降序排列，guitarpro 的 `Note(string=N)` 引用列表索引而非 `GuitarString.number` → 所有音符错配到相反弦号，GP8 中谱面上下颠倒 → 改 `_build_gp_strings` 按弦号升序排列
 - **M10**：MusicXML 中 alphaTab 与 guitarpro 的 staff-tuning line 号约定相反——alphaTab 的 line 1 = 最低音弦 → 六线谱视觉颠倒，音频计算跟着错 → `staff-tuning` line 号改为 `alpha_line = i + 1`（tuning[0]=6弦→line 1），`<string>` 和 `<pitch>` 保持原始弦号不变
+- **v1.0.1**：Docker 镜像不含 embedding 模型 → Dockerfile 瘦身时误删 `/root/.cache/huggingface`（模型下载后被当缓存清了）→ 删除该清理项
+- **v1.0.1**：modify 路由 500 错误 → 前端未传 `thread_id` + 后端未传 `config` → ModifyRequest 加 `thread_id` 字段，前端 modify 请求传 `thread_id`，后端 `graph.invoke()` 传 `config`
 
 
 ## M10 待办优化项（随开发过程积累）
