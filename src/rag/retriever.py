@@ -11,9 +11,10 @@
 检索策略：
   1. sentence-transformers 将 query 转为 embedding
   2. Chroma 向量相似度检索 top_k=10
-  3. 信任 Chroma 余弦距离排序，不做 type/confidence 二次重排
-     （二次重排会破坏语义相似度的自然顺序，导致错配）
-  4. 当前所有入库标签统一为 chord_only（LMD 素材均为和弦级，评分配方待 v2.0 重新校准）
+  3. 取前 3 个候选做 keyword match rerank：
+     a. 分词查询 → 任意 token 匹配 title → 立即返回
+     b. token 匹配 artist → 暂存作备选
+     c. 全都不匹配 → 返回 None（拒识）
 
 使用方式：
   from src.rag.retriever import retrieve_by_song_name
@@ -31,6 +32,63 @@ logger = logging.getLogger("retriever")
 
 # 检索兜底阈值：confidence 低于此值的 full_tab 降级为 chord_only
 _CONFIDENCE_DOWNGRADE_THRESHOLD = 0.75
+# keyword match 搜索的候选数
+_KEYWORD_MATCH_TOP_K = 3
+
+
+def _keyword_rerank(query: str, ids: list[str], metas: list[dict]) -> tuple[str, dict] | None:
+    """top-K keyword match rerank——歌名优先，艺术家其次，全不匹配返回 None。"""
+    tokens = [query.strip().lower()]
+    for part in query.split():
+        t = part.strip().lower()
+        if t:
+            tokens.append(t)
+
+    artist_fallback: tuple[str, dict] | None = None
+    limit = min(_KEYWORD_MATCH_TOP_K, len(metas))
+
+    for i in range(limit):
+        meta = metas[i]
+        t = meta.get("title", "").lower()
+        a = meta.get("artist", "").lower()
+        tid = ids[i] if i < len(ids) else ""
+
+        if any(tok in t for tok in tokens):
+            logger.info("检索命中(title): '%s' → %s (rank=%d)", query, meta["title"], i + 1)
+            return tid, meta
+
+        if artist_fallback is None and any(tok in a for tok in tokens):
+            artist_fallback = (tid, meta)
+
+    if artist_fallback:
+        meta = artist_fallback[1]
+        logger.info("检索命中(artist): '%s' → %s / %s", query, meta["title"], meta["artist"])
+        return artist_fallback
+
+    logger.info("检索拒识: '%s' — top-%d keyword match 全失败", query, limit)
+    return None
+
+
+def _build_rag_result(best_id: str, best_meta: dict) -> dict:
+    """构建返回的 dict——抽取公共字段。"""
+    tag = best_meta.get("type", "chord_only")
+    confidence = best_meta.get("confidence", 0)
+    if tag == "full_tab" and confidence < _CONFIDENCE_DOWNGRADE_THRESHOLD:
+        tag = "chord_only"
+
+    return {
+        "id": best_id,
+        "title": best_meta.get("title", ""),
+        "artist": best_meta.get("artist", ""),
+        "type": tag,
+        "confidence": confidence,
+        "score": best_meta.get("fingerstyle_score", 0),
+        "bpm": best_meta.get("bpm", 0),
+        "key": best_meta.get("key", ""),
+        "style": best_meta.get("style", ""),
+        "file_path": best_meta.get("file_path", ""),
+        "curated": best_meta.get("curated", False),
+    }
 
 
 def retrieve_by_song_name(query: str, top_k: int = 10) -> dict | None:
@@ -64,35 +122,14 @@ def retrieve_by_song_name(query: str, top_k: int = 10) -> dict | None:
     ids = ids_list[0]
     metas = metas_list[0]
 
-    # Chroma 已按余弦距离排序（最近的在前），直接取第一个作为最佳命中。
-    # 不做 type/confidence 的二次重排——那会破坏语义相似度的自然顺序，
-    # 导致"搜'黄昏'命中一个 full_tab 英文歌"的错配。
-    best_meta = metas[0]
+    # top-3 keyword match rerank：歌名优先，艺术家其次，全不匹配 = 拒识
+    best_meta = _keyword_rerank(query, ids, metas)
 
-    # 检索兜底：confidence < 阈值 的 full_tab → 降级为 chord_only
-    tag = best_meta.get("type", "chord_only")
-    confidence = best_meta.get("confidence", 0)
-    if tag == "full_tab" and confidence < _CONFIDENCE_DOWNGRADE_THRESHOLD:
-        logger.info(
-            "full_tab 置信度 %.2f < %.2f，降级为 chord_only（避免低质量直出）",
-            confidence, _CONFIDENCE_DOWNGRADE_THRESHOLD,
-        )
-        tag = "chord_only"
+    if best_meta is None:
+        return None
 
-    result = {
-        "id": ids[0] if ids else "",
-        "title": best_meta.get("title", ""),
-        "artist": best_meta.get("artist", ""),
-        "type": tag,
-        "confidence": confidence,
-        "score": best_meta.get("fingerstyle_score", 0),
-        "bpm": best_meta.get("bpm", 0),
-        "key": best_meta.get("key", ""),
-        "style": best_meta.get("style", ""),
-        "file_path": best_meta.get("file_path", ""),
-        "curated": best_meta.get("curated", False),
-    }
-    logger.info("检索命中: '%s' → %s (type=%s, conf=%.2f)", query, result["title"], tag, confidence)
+    result = _build_rag_result(best_meta[0], best_meta[1])
+    logger.info("检索命中: '%s' → %s (type=%s)", query, result["title"], result["type"])
     return result
 
 
