@@ -238,7 +238,7 @@ def modify(req: ModifyRequest) -> ModifyResponse:
     state["modify_instruction"] = req.instruction
     state["tab_data"] = current_tab.model_dump()
 
-    result = get_graph().invoke(state)
+    result = get_graph().invoke(state, config={"configurable": {"thread_id": req.thread_id or uuid.uuid4().hex}})
     if result.get("error"):
         raise HTTPException(500, f"修改失败: {result['error']}")
     modified_raw = result.get("tab_data", {})

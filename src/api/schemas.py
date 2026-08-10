@@ -320,6 +320,7 @@ class ModifyRequest(BaseModel):
 
     tab_id: str = Field(..., description="当前正在编辑的谱面 ID")
     instruction: str = Field(..., min_length=1, description="自然语言修改指令，如'副歌简化一点'")
+    thread_id: str = Field(default="", description="短期记忆会话标识（Checkpointer 恢复用）")
 
 
 class ModifyResponse(BaseModel):

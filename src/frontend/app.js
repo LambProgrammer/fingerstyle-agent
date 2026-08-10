@@ -399,7 +399,11 @@
             const resp = await fetch("/modify", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tab_id: currentTabId, instruction }),
+                body: JSON.stringify({
+                    tab_id: currentTabId,
+                    instruction,
+                    thread_id: localStorage.getItem("fs_thread_id") || "",
+                }),
             });
             if (!resp.ok) {
                 const err = await resp.json();
